@@ -36,6 +36,20 @@ jobs:
           node --check server/brainRunner.js
           node --check src/api/realRobotApi.js
 
+      - name: Smoke test native C++ runtime
+        run: |
+          cat > /tmp/brain-smoke.cpp <<'EOF'
+          #include "brain/robot_runtime.hpp"
+          Robot robot;
+          int main() {
+            robot.forward(40);
+            robot.turn_right(30);
+            robot.stop();
+            return 0;
+          }
+          EOF
+          g++ -std=c++17 -pthread -I. /tmp/brain-smoke.cpp -o /tmp/brain-smoke
+
       - name: Build
         run: npm run build
 
