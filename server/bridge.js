@@ -1,11 +1,19 @@
 import http from 'node:http'
 import net from 'node:net'
+import dgram from 'node:dgram'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { CATALOG } from '../src/robots/catalog.js'
 import { toRobot } from '../src/models/robot.js'
 
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1'
 const PORT = Number(process.env.BRIDGE_PORT || 8000)
+const DISCOVERY_PORT = Number(process.env.DISCOVERY_PORT || 4210)
+const DISCOVERY_WAIT = 1400
+const exec = promisify(execFile)
 const robots = new Map()
+const discoverySocket = dgram.createSocket('udp4')
+const discoveredRobots = new Map()
 
 const json = (res, status, data) => {
   res.writeHead(status, {
@@ -23,6 +31,31 @@ const sseHeaders = {
   Connection: 'keep-alive',
   'Access-Control-Allow-Origin': '*',
 }
+
+discoverySocket.on('message', (buf, rinfo) => {
+  try {
+    const msg = JSON.parse(buf.toString())
+    if (msg.type !== 'robot' || msg.protocol !== 1) return
+    const port = Number(msg.tcp_port || 5000)
+    if (!msg.id || !msg.robot_type) return
+    discoveredRobots.set(msg.id, {
+      kind: 'esp32',
+      name: msg.name || msg.id,
+      id: msg.id,
+      type: msg.robot_type,
+      ip: rinfo.address,
+      port,
+      firmware: msg.firmware || 'unknown',
+      version: msg.version || '1',
+      lastSeen: Date.now(),
+    })
+  } catch {}
+})
+
+discoverySocket.bind(DISCOVERY_PORT, '0.0.0.0', () => {
+  try { discoverySocket.setBroadcast(true) } catch {}
+  console.log(`ESP32 discovery listening on UDP ${DISCOVERY_PORT}`)
+})
 
 const body = req => new Promise((resolve, reject) => {
   let raw = ''
@@ -141,6 +174,97 @@ function baseRobot(params) {
   return toRobot(raw, { id: params.id, ip: params.ip, port: Number(params.port) || 5000 })
 }
 
+function parseNeighbors(text) {
+  const out = new Map()
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/(?:^|\s)(\d{1,3}(?:\.\d{1,3}){3})\s+(?:dev\s+\S+\s+)?(?:lladdr\s+)?([0-9a-f]{2}(?::[0-9a-f]{2}){5})\s*(\w+)?/i)
+    if (m) out.set(m[1], { ip: m[1], mac: m[2].toUpperCase(), state: m[3] || 'UNKNOWN' })
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/(?:^|\()(\d{1,3}(?:\.\d{1,3}){3})\)?\s+at\s+([0-9a-f]{2}(?::[0-9a-f]{2}){5})/i)
+    if (m && !out.has(m[1])) out.set(m[1], { ip: m[1], mac: m[2].toUpperCase(), state: 'ARP' })
+  }
+  return [...out.values()]
+}
+
+async function getLanDevices() {
+  let neighborText = ''
+  try {
+    const r = await exec('ip', ['-4', 'neigh', 'show'], { timeout: 1500 })
+    neighborText = r.stdout || ''
+  } catch {}
+  if (!neighborText) {
+    try {
+      const r = await exec('arp', ['-a'], { timeout: 1500 })
+      neighborText = r.stdout || ''
+    } catch {}
+  }
+  return parseNeighbors(neighborText)
+}
+
+const tcpProbe = (host, port, timeout = 250) => new Promise(resolve => {
+  const s = net.createConnection({ host, port })
+  let done = false
+  const finish = ok => {
+    if (done) return
+    done = true
+    s.destroy()
+    resolve(ok)
+  }
+  s.setTimeout(timeout, () => finish(false))
+  s.on('connect', () => finish(true))
+  s.on('error', () => finish(false))
+})
+
+async function discoverNetwork() {
+  const devices = await getLanDevices()
+  const extra = []
+  const candidateIps = devices.map(d => d.ip)
+  const queue = candidateIps.filter(ip => ip !== '127.0.0.1').map(ip => async () => {
+    const ports = []
+    for (const port of [5000, 80, 81, 8080]) {
+      if (await tcpProbe(ip, port)) ports.push(port)
+    }
+    return { ip, ports }
+  })
+  let cursor = 0
+  const workers = Array.from({ length: Math.min(24, queue.length) }, async () => {
+    while (cursor < queue.length) {
+      const i = cursor++
+      extra[i] = await queue[i]()
+    }
+  })
+  await Promise.all(workers)
+
+  const byIp = new Map(devices.map(d => [d.ip, d]))
+  for (const p of extra) {
+    const d = byIp.get(p.ip)
+    if (d) d.services = p.ports.map(port => ({ port, protocol: 'tcp' }))
+  }
+
+  const message = Buffer.from(JSON.stringify({ type: 'discover', protocol: 1 }))
+  try { discoverySocket.setBroadcast(true); discoverySocket.send(message, 0, message.length, DISCOVERY_PORT, '255.255.255.255') } catch {}
+
+  await new Promise(r => setTimeout(r, DISCOVERY_WAIT))
+
+  const robotsFound = [...discoveredRobots.values()].map(r => ({
+    ...r,
+    mac: byIp.get(r.ip)?.mac || null,
+  }))
+
+  const robotIps = new Set(robotsFound.map(r => r.ip))
+  const network = [...byIp.values()]
+    .filter(d => d.state !== 'INCOMPLETE')
+    .map(d => ({
+      ...d,
+      name: d.ip,
+      kind: robotIps.has(d.ip) ? 'esp32' : 'device',
+      robot: robotsFound.find(r => r.ip === d.ip) || null,
+    }))
+
+  return { devices: network, robots: robotsFound, scannedAt: new Date().toISOString() }
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return json(res, 204, {})
   const url = new URL(req.url, `http://${HOST}:${PORT}`)
@@ -154,7 +278,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return json(res, 200, { ok: true, bridge: 'robot-control', version: 1, robots: robots.size })
+      return json(res, 200, { ok: true, bridge: 'robot-control', version: 2, robots: robots.size, discoveryPort: DISCOVERY_PORT })
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/discover') {
+      return json(res, 200, await discoverNetwork())
     }
 
     if (req.method === 'GET' && url.pathname === '/api/robot/events') {
