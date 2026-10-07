@@ -36,11 +36,11 @@ void handleRobotDiscovery() {
   if (strstr(packet, "\"type\":\"discover\"") == nullptr) return;
   if (strstr(packet, "\"protocol\":1") == nullptr) return;
 
-  String reply = String(`{"type":"robot","protocol":1,"id":"`) + ROBOT_ID
-    + String(`","name":"`) + ROBOT_NAME
-    + String(`","robot_type":"`) + ROBOT_TYPE
-    + String(`","tcp_port":`) + ROBOT_TCP_PORT
-    + String(`,"firmware":"claude-robot-esp32","version":"1.0"}`);
+  String reply = "{\"type\":\"robot\",\"protocol\":1,\"id\":\"" + String(ROBOT_ID)
+    + "\",\"name\":\"" + String(ROBOT_NAME)
+    + "\",\"robot_type\":\"" + String(ROBOT_TYPE)
+    + "\",\"tcp_port\":" + String(ROBOT_TCP_PORT)
+    + ",\"firmware\":\"claude-robot-esp32\",\"version\":\"1.0\"}";
 
   discoveryUdp.beginPacket(discoveryUdp.remoteIP(), discoveryUdp.remotePort());
   discoveryUdp.print(reply);
