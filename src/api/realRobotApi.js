@@ -60,6 +60,8 @@ const build = (id, code) => request('/api/robot/build', {
 })
 const run = id => request('/api/robot/run', { method: 'POST', body: JSON.stringify({ id }) })
 const stop = id => request('/api/robot/stop', { method: 'POST', body: JSON.stringify({ id }) })
+const visionStatus = () => request('/api/robot/vision/status')
+const visionAnalyze = (id, image) => request('/api/robot/vision/analyze', { method:'POST', body:JSON.stringify({ id, image }) })
 const aiStatus = id => request('/api/robot/ai/status?id=' + encodeURIComponent(id))
 const aiDecide = (id, personality = 'default', execute = true) => request('/api/robot/ai/decide', { method:'POST', body:JSON.stringify({ id, personality, execute }) })
 const aiStart = (id, personality = 'default', interval = 2500) => request('/api/robot/ai/start', { method:'POST', body:JSON.stringify({ id, personality, interval }) })
@@ -82,6 +84,8 @@ export const realRobotApi = {
   build,
   run,
   stop,
+  visionStatus,
+  visionAnalyze,
   aiStatus,
   aiDecide,
   aiStart,
