@@ -75,9 +75,10 @@ export async function decide({robot,state,personality='default'}) {
 export async function startAIBrain({robot,getState,sendCommand,personality='default',interval=2500,onDecision,onError}) {
   if(loops.has(robot.id)) return {ok:true,alreadyRunning:true}
   const loop={stop:false}; loops.set(robot.id,loop)
-  const run=async()=>{ while(!loop.stop){ try { const state=getState(); const decision=await decide({robot,state,personality}); if(!loop.stop&&state?.connected!==false){ sendCommand(decision.function,decision.arg); onDecision?.(decision) } } catch(e){ onError?.(e) } await sleep(interval) } }
+  const run=async()=>{ while(!loop.stop){ try { const state=getState(); const decision=await decide({robot,state,personality}); if(!loop.stop&&state?.connected!==false){ sendCommand(commandForFunction(decision.function),decision.arg); onDecision?.(decision) } } catch(e){ onError?.(e) } await sleep(interval) } }
   run().catch(onError); return {ok:true,alreadyRunning:false}
 }
 export function stopAIBrain(id){const loop=loops.get(id);if(!loop)return false;loop.stop=true;loops.delete(id);return true}
 export function aiBrainRunning(id){return loops.has(id)}
+export function commandForFunction(fn){return COMMANDS[fn] || null}
 export const personalityProfiles=Object.keys(PERSONALITIES)
