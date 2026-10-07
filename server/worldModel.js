@@ -41,6 +41,7 @@ export function createWorldModel() {
     tracks: new Map(),
     lastUpdate: Date.now(),
     lastCommand: 'IDLE',
+    lastTurnCommand: null,
   }
 
   function moveForCommand(command, arg, dtMs) {
@@ -50,8 +51,16 @@ export function createWorldModel() {
     const dt = clamp(Number(dtMs) || 0, 0, 1500)
     const step = DEFAULT_STEP_CM * scale * (dt / 600)
 
-    if (cmd.includes('TURN_LEFT')) model.heading = normalizeHeading(model.heading - TURN_DEG * Math.min(1, Math.max(0.25, scale)))
-    else if (cmd.includes('TURN_RIGHT')) model.heading = normalizeHeading(model.heading + TURN_DEG * Math.min(1, Math.max(0.25, scale)))
+    if (cmd.includes('TURN_LEFT') || cmd.includes('TURN_RIGHT')) {
+      if (model.lastTurnCommand !== cmd) {
+        const degrees = Number.isFinite(value) ? clamp(Math.abs(value), 15, 180) : TURN_DEG
+        const sign = cmd.includes('TURN_LEFT') ? -1 : 1
+        model.heading = normalizeHeading(model.heading + sign * degrees)
+        model.lastTurnCommand = cmd
+      }
+    } else {
+      model.lastTurnCommand = null
+    }
     else if (cmd.includes('FORWARD') || cmd.includes('WALK_FORWARD') || cmd.includes('FLY_FORWARD')) {
       const r = model.heading * Math.PI / 180
       model.x += Math.sin(r) * step
