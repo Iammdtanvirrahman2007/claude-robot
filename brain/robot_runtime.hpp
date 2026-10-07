@@ -22,7 +22,7 @@ public:
 private:
   std::atomic<bool> online_{true};
   std::atomic<bool> running_{true};
-  std::mutex stateMutex_;
+  mutable std::mutex stateMutex_;
   std::thread reader_;
   double frontDistance_ = 120.0;
   double obstacle_ = 40.0;
