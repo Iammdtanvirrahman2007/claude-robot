@@ -1,5 +1,27 @@
 const MODEL = process.env.ROBOT_VISION_MODEL || 'gpt-6-astra'
 
+function normalizeVision(result) {
+  const objects = Array.isArray(result?.objects) ? result.objects.map(o => ({
+    label: String(o?.label || 'unknown').slice(0, 80),
+    confidence: Math.max(0, Math.min(1, Number(o?.confidence) || 0)),
+    position: ['left','center','right'].includes(o?.position) ? o.position : 'center',
+    distance: ['near','medium','far'].includes(o?.distance) ? o.distance : 'unknown',
+  })) : []
+  const hazards = Array.isArray(result?.hazards) ? result.hazards.map(x => String(x).slice(0, 120)).slice(0, 12) : []
+  const path = {
+    clear: result?.path?.clear !== false,
+    direction: ['left','center','right','blocked'].includes(result?.path?.direction) ? result.path.direction : 'blocked',
+  }
+  return {
+    scene: String(result?.scene || 'Unknown scene').slice(0, 240),
+    objects: objects.slice(0, 30),
+    people: Math.max(0, Number(result?.people) || 0),
+    obstacles: Math.max(0, Number(result?.obstacles) || 0),
+    path,
+    hazards,
+  }
+}
+
 export async function analyzeFrame(imageData, context = {}) {
   const key = process.env.OPENAI_API_KEY
   if (!key) throw new Error('OPENAI_API_KEY is not configured')
@@ -9,6 +31,7 @@ export async function analyzeFrame(imageData, context = {}) {
     'You are the robot vision system.',
     'Analyze this camera frame for safe robot navigation.',
     'Return ONLY JSON. Do not guess hidden objects.',
+    'Treat near objects directly ahead as navigation hazards.',
     'Schema: {"scene":"short description","objects":[{"label":"object","confidence":0-1,"position":"left|center|right","distance":"near|medium|far"}],"people":number,"obstacles":number,"path":{"clear":true,"direction":"left|center|right|blocked"},"hazards":[]}',
     'Robot telemetry context: ' + JSON.stringify(context),
   ].join('\n')
@@ -35,5 +58,5 @@ export async function analyzeFrame(imageData, context = {}) {
     result = m ? JSON.parse(m[0]) : null
   }
   if (!result) throw new Error('Vision returned invalid JSON')
-  return { ...result, model: MODEL, analyzedAt: new Date().toISOString() }
+  return { ...normalizeVision(result), model: MODEL, analyzedAt: new Date().toISOString() }
 }
