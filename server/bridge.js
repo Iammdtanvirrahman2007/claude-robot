@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { buildBrain, startBrain } from './brainRunner.js'
 import { startAIBrain, stopAIBrain, aiBrainRunning, decide, personalityProfiles, commandForFunction } from './aiBrain.js'
+import { analyzeFrame } from './vision.js'
 import { CATALOG } from '../src/robots/catalog.js'
 import { toRobot } from '../src/models/robot.js'
 
@@ -450,6 +451,20 @@ const server = http.createServer(async (req, res) => {
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
       sendTcp(r, { type: 'command', cmd: String(data.cmd || 'STOP'), arg: data.arg ?? null })
       return json(res, 200, { ok: true })
+    }
+
+    if (url.pathname === '/api/robot/vision/status') {
+      return json(res, 200, { model: process.env.ROBOT_VISION_MODEL || 'gpt-6-astra', apiConfigured: Boolean(process.env.OPENAI_API_KEY) })
+    }
+
+    if (url.pathname === '/api/robot/vision/analyze') {
+      const r = robots.get(data.id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      const vision = await analyzeFrame(String(data.image || ''), r.lastState || {})
+      r.lastState = { ...r.lastState, camera: { ...(r.lastState?.camera || {}), status: 'Vision active', vision } }
+      broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
+      broadcast(r.params.id, { kind: 'vision', vision })
+      return json(res, 200, vision)
     }
 
     if (url.pathname === '/api/robot/ai/status') {
