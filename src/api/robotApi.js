@@ -224,6 +224,7 @@ export const robotApi = {
   build: (...a) => active.build(...a),
   run: (...a) => active.run(...a),
   stop: (...a) => active.stop(...a),
+  world: (...a) => active === realRobotApi ? realRobotApi.world(...a) : Promise.resolve(null),
   visionStatus: (...a) => active === realRobotApi ? realRobotApi.visionStatus(...a) : Promise.resolve({ model:'simulation', apiConfigured:false }),
   visionAnalyze: (...a) => active === realRobotApi ? realRobotApi.visionAnalyze(...a) : Promise.reject(new Error('Switch to LOCAL BRIDGE mode to analyze camera frames')),
   aiStatus: (...a) => active === realRobotApi ? realRobotApi.aiStatus(...a) : Promise.resolve({ running:false, personalities:['default','explorer','guardian','companion'], model:'simulation', apiConfigured:false }),
