@@ -79,6 +79,7 @@ private:
   }
 
 public:
+  Robot();
   ~Robot();
 
   bool connected() const { return online_.load(); }
