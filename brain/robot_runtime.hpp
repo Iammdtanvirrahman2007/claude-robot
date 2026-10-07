@@ -8,11 +8,16 @@
 #include <string>
 #include <thread>
 
-class CameraAPI;
-
 class Robot {
 public:
-  CameraAPI* cameraPtr = nullptr;
+  class Camera {
+    Robot* robot_;
+  public:
+    explicit Camera(Robot* robot) : robot_(robot) {}
+    bool detect_obstacle() const;
+  };
+
+  Camera camera;
 
 private:
   std::atomic<bool> online_{true};
@@ -74,7 +79,6 @@ private:
   }
 
 public:
-  Robot();
   ~Robot();
 
   bool connected() const { return online_.load(); }
