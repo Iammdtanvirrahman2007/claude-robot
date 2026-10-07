@@ -60,6 +60,10 @@ const build = (id, code) => request('/api/robot/build', {
 })
 const run = id => request('/api/robot/run', { method: 'POST', body: JSON.stringify({ id }) })
 const stop = id => request('/api/robot/stop', { method: 'POST', body: JSON.stringify({ id }) })
+const aiStatus = id => request('/api/robot/ai/status?id=' + encodeURIComponent(id))
+const aiDecide = (id, personality = 'default', execute = true) => request('/api/robot/ai/decide', { method:'POST', body:JSON.stringify({ id, personality, execute }) })
+const aiStart = (id, personality = 'default', interval = 2500) => request('/api/robot/ai/start', { method:'POST', body:JSON.stringify({ id, personality, interval }) })
+const aiStop = id => request('/api/robot/ai/stop', { method:'POST', body:JSON.stringify({ id }) })
 
 const disconnect = async id => {
   closeStream(id)
@@ -78,6 +82,10 @@ export const realRobotApi = {
   build,
   run,
   stop,
+  aiStatus,
+  aiDecide,
+  aiStart,
+  aiStop,
   disconnect,
   setBase(url) {
     base = url.trim().replace(/\/$/, '') || 'http://127.0.0.1:8000'
