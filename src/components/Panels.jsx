@@ -110,6 +110,50 @@ export function CameraPanel({ cfg, state }) {
   )
 }
 
+
+export function MapPanel({ cfg, state }) {
+  const world = state.camera?.world
+  const path = world?.path || []
+  const obstacles = world?.obstacles || []
+  const objects = world?.objects || []
+  const robot = world?.robot || { x: 0, y: 0, heading: 0 }
+  const points = [
+    ...path,
+    ...obstacles.map(o => ({ x: o.x, y: o.y })),
+    ...objects.map(o => ({ x: o.x, y: o.y })),
+    { x: robot.x, y: robot.y },
+  ]
+  const maxAbs = Math.max(120, ...points.map(p => Math.max(Math.abs(p.x), Math.abs(p.y))) + 60)
+  const size = maxAbs * 2
+  const sx = x => x + maxAbs
+  const sy = y => maxAbs - y
+  const poly = path.map(p => sx(p.x) + ',' + sy(p.y)).join(' ')
+  const heading = (robot.heading - 0) * Math.PI / 180
+  const hx = sx(robot.x) + Math.sin(heading) * 22
+  const hy = sy(robot.y) - Math.cos(heading) * 22
+
+  return (
+    <Card title="WORLD MAP" tag={<span className="ok">● LIVE · 2D</span>}>
+      <svg viewBox={'0 0 ' + size + ' ' + size} width="100%" style={{display:'block',background:'rgba(0,0,0,.18)',borderRadius:8}}>
+        <defs><pattern id={'grid-' + cfg.id} width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" opacity=".10" /></pattern></defs>
+        <rect width="100%" height="100%" fill={'url(#grid-' + cfg.id + ')'} />
+        {poly && <polyline points={poly} fill="none" stroke="currentColor" strokeWidth={2} opacity=".65" />}
+        <circle cx={sx(0)} cy={sy(0)} r="4" fill="currentColor" opacity=".35" />
+        {obstacles.map(o => <g key={o.id}><circle cx={sx(o.x)} cy={sy(o.y)} r={Math.max(5, Math.min(11, 10 - o.distanceCm / 30))} fill="currentColor" opacity=".9" /><text x={sx(o.x)+9} y={sy(o.y)-8} fontSize="10" fill="currentColor">{o.label}</text></g>)}
+        {objects.filter(o => !obstacles.some(b => b.id === o.id)).map(o => <circle key={o.id} cx={sx(o.x)} cy={sy(o.y)} r="5" fill="currentColor" opacity=".55" />)}
+        <g><circle cx={sx(robot.x)} cy={sy(robot.y)} r="9" fill="currentColor" /><line x1={sx(robot.x)} y1={sy(robot.y)} x2={hx} y2={hy} stroke="currentColor" strokeWidth="4" strokeLinecap="round" /></g>
+      </svg>
+      <div className="kv">
+        <span>Robot <b>{robot.x.toFixed(0)}, {robot.y.toFixed(0)} cm</b></span>
+        <span>Heading <b>{robot.heading.toFixed(0)}°</b></span>
+        <span>Obstacles <b>{obstacles.length}</b></span>
+        <span>Objects <b>{objects.length}</b></span>
+      </div>
+      <small className="dim">Approximate local map from movement + distance/vision data. Odometry/IMU will improve accuracy.</small>
+    </Card>
+  )
+}
+
 export function ActuatorPanel({ cfg, state }) {
   return (
     <Card title={cfg.panels.actuators} tag={`${cfg.actuators.length} channels`}>
