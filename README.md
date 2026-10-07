@@ -41,7 +41,7 @@ npm run dev
 
 5. Switch the app to **LOCAL BRIDGE**, connect a robot, choose a personality, then use **AI BRAIN → Start AI**.
 
-The current AI uses the OpenAI Responses API from the laptop bridge. Camera frames are not yet fed to the reasoning model; the current camera field is telemetry metadata. Vision processing is the next layer.
+The current AI uses the OpenAI Responses API from the laptop bridge. Camera frames can now be captured from the browser and sent to the bridge Vision layer. The Vision layer returns structured scene/object/path data, which is attached to robot telemetry and becomes available to the reasoning brain. Set `ROBOT_VISION_MODEL` to change the vision model.
 
 ## Safety
 
