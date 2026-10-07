@@ -99,3 +99,14 @@ input:focus,select:focus{outline:1px solid var(--ac)}
 .rb.remove{color:var(--err);border-color:#43202a}.rb small{font-size:10.5px;margin-top:2px}
 .cardError{padding:8px 10px;border:1px solid #5a2330;background:#25131a;border-radius:5px;color:var(--err);font:12px var(--mono)}
 .bridgeHelp{margin-top:12px;padding:9px 10px;border:1px dashed var(--ln);border-radius:5px;color:var(--dim);font-size:11.5px}
+
+.discoverBtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:9px 12px;border:1px solid var(--ac);border-radius:6px;background:#0d2834;color:var(--ac);font:700 12px var(--mono);letter-spacing:.06em;cursor:pointer}
+.discoverBtn:hover:not(:disabled){background:#103a4a}.discoverBtn:disabled{opacity:.5;cursor:default}
+.spin{display:inline-block;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.discoverBox{border:1px solid var(--ln);border-radius:6px;background:var(--bg);overflow:hidden}
+.discoverHead{display:flex;justify-content:space-between;padding:7px 9px;border-bottom:1px solid var(--ln);font:10.5px var(--mono);color:var(--dim);letter-spacing:.08em}
+.deviceList{max-height:235px;overflow:auto}
+.device{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;width:100%;padding:8px;border:0;border-bottom:1px solid #16202c;background:transparent;text-align:left;color:var(--tx);cursor:default}
+.device:last-child{border-bottom:0}.device.robot{cursor:pointer}.device.robot:hover{background:#0c242f}
+.deviceIcon{font-size:17px;text-align:center}.deviceInfo{display:flex;flex-direction:column;min-width:0}.deviceInfo b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.deviceInfo small{font:10px/1.4 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.deviceAction{font:10px var(--mono);letter-spacing:.04em;white-space:nowrap}.discoverNote{display:block;padding:7px 9px;border-top:1px dashed var(--ln);font-size:10px}
