@@ -72,7 +72,15 @@ function attachSocket(r) {
   socket.on('connect', () => {
     r.connected = true
     r.lastSeen = Date.now()
+    const sensors = Object.fromEntries(r.robot.sensors.map(s => [s.id, s.v ?? null]))
+    const actuators = Object.fromEntries(r.robot.actuators.map(a => [a.id, a.v ?? 0]))
+    r.lastState = {
+      connected: true, battery: sensors.battery ?? null, currentCommand: 'IDLE', speed: 0,
+      sensors, actuators, camera: r.robot.camera ? { ...r.robot.camera, status: 'Waiting for frames' } : null,
+      errors: [], link: { latency: 0, rssi: 0, tx: r.tx, rx: r.rx }, heartbeat: r.lastSeen
+    }
     try { sendTcp(r, { type: 'hello', id: r.params.id, protocol: 1 }) } catch {}
+    broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
     broadcast(r.params.id, { kind: 'log', line: {
       t: new Date().toTimeString().slice(0, 8), level: 'ok',
       text: `TCP connected to ${r.params.ip}:${r.params.port}`,
@@ -91,7 +99,11 @@ function attachSocket(r) {
         r.lastSeen = Date.now()
         r.rx++
         if (msg.type === 'hardware' && msg.robot) normalizeRobot(r, { ...msg.robot, type: msg.robot.type || r.params.type })
-        else if (msg.type === 'telemetry' && msg.state) broadcast(r.params.id, { kind: 'telemetry', state: msg.state })
+        else if (msg.type === 'telemetry' && msg.state) {
+          r.lastState = { ...msg.state, connected: true, heartbeat: r.lastSeen,
+            link: { ...(msg.state.link || {}), tx: r.tx, rx: r.rx } }
+          broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
+        }
         else if (msg.type === 'log') broadcast(r.params.id, { kind: 'log', line: msg.line || {
           t: new Date().toTimeString().slice(0, 8), level: 'info', text: String(msg.text || '')
         }})
