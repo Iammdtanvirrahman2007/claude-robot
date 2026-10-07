@@ -187,51 +187,106 @@ function parseNeighbors(text) {
   return [...out.values()]
 }
 
-async function getLanDevices() {
-  let neighborText = ''
-  if (process.platform === 'linux') {
-    try {
-      const r = await exec('ip', ['-4', '-o', 'addr', 'show', 'scope', 'global'], { timeout: 1200 })
-      const rows = (r.stdout || '').split(/\r?\n/).filter(Boolean)
-      const cidrs = rows.map(line => line.match(/inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+)/)).filter(Boolean)
-      const cidr = cidrs.find(m => Number(m[2]) >= 24)?.[0]
-      if (cidr) {
-        const [host, prefix] = cidr.split('/')
-        if (Number(prefix) === 24) {
-          const octets = host.split('.').map(Number)
-          const ips = Array.from({ length: 254 }, (_, i) => [...octets.slice(0, 3), i + 1].join('.'))
-          let cursor = 0
-          const alive = []
-          const workers = Array.from({ length: 48 }, async () => {
-            while (cursor < ips.length) {
-              const ip = ips[cursor++]
-              if (ip === host) continue
-              try {
-                await exec('ping', ['-c', '1', '-W', '1', ip], { timeout: 1400 })
-                alive.push(ip)
-              } catch {}
-            }
-          })
-          await Promise.all(workers)
-          neighborText = alive.map(ip => ip + ' dev lan REACHABLE').join('\n')
-        }
-      }
-    } catch {}
-  }
-
+async function getLocalNetwork() {
   try {
-    const r = await exec('ip', ['-4', 'neigh', 'show'], { timeout: 1500 })
-    neighborText += '\n' + (r.stdout || '')
+    const r = await exec('ip', ['-4', '-o', 'addr', 'show', 'scope', 'global'], { timeout: 1500 })
+    const rows = (r.stdout || '').split(/\r?\n/).filter(Boolean)
+    for (const line of rows) {
+      const m = line.match(/inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+).*?brd\s+(\d+\.\d+\.\d+\.\d+)/)
+      if (m) return { host: m[1], prefix: Number(m[2]), broadcast: m[3] }
+    }
   } catch {}
-  if (!neighborText) {
-    try {
-      const r = await exec('arp', ['-a'], { timeout: 1500 })
-      neighborText = r.stdout || ''
-    } catch {}
-  }
-  return parseNeighbors(neighborText)
+  return null
 }
 
+function parseNmap(text) {
+  const out = new Map()
+  let current = null
+  for (const line of text.split(/\r?\n/)) {
+    const h = line.match(/^Nmap scan report for (?:[^\s]+\s+)?(\d{1,3}(?:\.\d{1,3}){3})$/)
+    if (h) {
+      current = { ip: h[1], mac: null, state: 'UP' }
+      out.set(current.ip, current)
+      continue
+    }
+    const mac = line.match(/MAC Address:\s*([0-9A-F:]{17})\s*(?:\(([^)]+)\))?/i)
+    if (mac && current) {
+      current.mac = mac[1].toUpperCase()
+      current.vendor = mac[2] || null
+    }
+  }
+  return [...out.values()]
+}
+
+async function scanWithNmap(cidr) {
+  try {
+    const r = await exec('nmap', ['-sn', '-PR', '-n', cidr], {
+      timeout: 8000,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    return parseNmap(r.stdout || '')
+  } catch {
+    return null
+  }
+}
+
+async function scan24(host, prefix) {
+  if (prefix !== 24) return []
+  const octets = host.split('.').map(Number)
+  const ips = Array.from({ length: 254 }, (_, i) => [...octets.slice(0, 3), i + 1].join('.'))
+  let cursor = 0
+  const alive = new Map()
+  const workers = Array.from({ length: 48 }, async () => {
+    while (cursor < ips.length) {
+      const ip = ips[cursor++]
+      if (ip === host) continue
+      try {
+        await exec('ping', ['-c', '1', '-W', '1', ip], { timeout: 1400 })
+        alive.set(ip, { ip, mac: null, state: 'UP' })
+      } catch {}
+    }
+  })
+  await Promise.all(workers)
+  return [...alive.values()]
+}
+
+async function getLanDevices() {
+  const local = await getLocalNetwork()
+  let devices = []
+  let method = 'neighbor-table'
+
+  if (local) {
+    const cidr = `${local.host}/${local.prefix}`
+    const nmap = await scanWithNmap(cidr)
+    if (nmap?.length) {
+      devices = nmap
+      method = 'nmap-arp'
+    } else {
+      devices = await scan24(local.host, local.prefix)
+      if (devices.length) method = 'icmp-scan'
+    }
+  }
+
+  let neighborText = ''
+  try {
+    const r = await exec('ip', ['-4', 'neigh', 'show'], { timeout: 1500 })
+    neighborText = r.stdout || ''
+  } catch {}
+
+  const neighbors = parseNeighbors(neighborText)
+  const byIp = new Map(devices.map(d => [d.ip, d]))
+  for (const n of neighbors) {
+    const current = byIp.get(n.ip)
+    if (current) {
+      current.mac = current.mac || n.mac
+      current.state = current.state || n.state
+    } else if (n.state !== 'INCOMPLETE') {
+      byIp.set(n.ip, n)
+    }
+  }
+
+  return { devices: [...byIp.values()], method, local }
+}
 const tcpProbe = (host, port, timeout = 250) => new Promise(resolve => {
   const s = net.createConnection({ host, port })
   let done = false
@@ -247,9 +302,12 @@ const tcpProbe = (host, port, timeout = 250) => new Promise(resolve => {
 })
 
 async function discoverNetwork() {
-  const devices = await getLanDevices()
+  discoveredRobots.clear()
+  const scan = await getLanDevices()
+  const devices = scan.devices || []
   const extra = []
   const candidateIps = devices.map(d => d.ip)
+
   const queue = candidateIps.filter(ip => ip !== '127.0.0.1').map(ip => async () => {
     const ports = []
     for (const port of [5000, 80, 81, 8080]) {
@@ -257,6 +315,7 @@ async function discoverNetwork() {
     }
     return { ip, ports }
   })
+
   let cursor = 0
   const workers = Array.from({ length: Math.min(24, queue.length) }, async () => {
     while (cursor < queue.length) {
@@ -272,8 +331,15 @@ async function discoverNetwork() {
     if (d) d.services = p.ports.map(port => ({ port, protocol: 'tcp' }))
   }
 
+  const broadcastAddress = scan.local?.broadcast || '255.255.255.255'
   const message = Buffer.from(JSON.stringify({ type: 'discover', protocol: 1 }))
-  try { discoverySocket.setBroadcast(true); discoverySocket.send(message, 0, message.length, DISCOVERY_PORT, '255.255.255.255') } catch {}
+  try {
+    discoverySocket.setBroadcast(true)
+    discoverySocket.send(message, 0, message.length, DISCOVERY_PORT, broadcastAddress)
+  } catch {}
+  if (broadcastAddress !== '255.255.255.255') {
+    try { discoverySocket.send(message, 0, message.length, DISCOVERY_PORT, '255.255.255.255') } catch {}
+  }
 
   await new Promise(r => setTimeout(r, DISCOVERY_WAIT))
 
@@ -282,31 +348,34 @@ async function discoverNetwork() {
     mac: byIp.get(r.ip)?.mac || null,
   }))
 
-  const robotIps = new Set(robotsFound.map(r => r.ip))
+  const robotByIp = new Map(robotsFound.map(r => [r.ip, r]))
   const network = [...byIp.values()]
     .filter(d => d.state !== 'INCOMPLETE')
     .map(d => ({
       ...d,
-      name: d.ip,
-      kind: robotIps.has(d.ip) ? 'esp32' : 'device',
-      robot: robotsFound.find(r => r.ip === d.ip) || null,
+      name: robotByIp.get(d.ip)?.name || d.vendor || d.ip,
+      kind: robotByIp.has(d.ip) ? 'esp32' : 'device',
+      robot: robotByIp.get(d.ip) || null,
     }))
 
   for (const robot of robotsFound) {
     if (!byIp.has(robot.ip)) {
       network.push({
-        ip: robot.ip,
-        mac: robot.mac,
-        state: 'DISCOVERED',
-        name: robot.name,
-        kind: 'esp32',
-        robot,
+        ip: robot.ip, mac: robot.mac, state: 'DISCOVERED',
+        name: robot.name, kind: 'esp32', robot,
         services: [{ port: robot.port, protocol: 'tcp' }],
       })
     }
   }
 
-  return { devices: network, robots: robotsFound, scannedAt: new Date().toISOString() }
+  network.sort((a, b) => (a.kind === 'esp32' ? -1 : 1) - (b.kind === 'esp32' ? -1 : 1) || a.ip.localeCompare(b.ip, undefined, { numeric: true }))
+  return {
+    devices: network,
+    robots: robotsFound,
+    scannedAt: new Date().toISOString(),
+    method: scan.method,
+    subnet: scan.local ? `${scan.local.host}/${scan.local.prefix}` : null,
+  }
 }
 
 const server = http.createServer(async (req, res) => {
