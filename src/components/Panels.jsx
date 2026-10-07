@@ -43,6 +43,7 @@ export function SensorPanel({ cfg, state }) {
 export function CameraPanel({ cfg, state }) {
   const c = state.camera
   const [streaming, setStreaming] = useState(false)
+  const [autoVision, setAutoVision] = useState(false)
   const [busy, setBusy] = useState(false)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -52,38 +53,58 @@ export function CameraPanel({ cfg, state }) {
   useEffect(() => () => streamRef.current?.getTracks().forEach(t => t.stop()), [])
 
   async function cameraOn() {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
-    streamRef.current = stream
-    videoRef.current.srcObject = stream
-    await videoRef.current.play()
-    setStreaming(true)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
+      streamRef.current = stream
+      videoRef.current.srcObject = stream
+      await videoRef.current.play()
+      setStreaming(true)
+    } catch (e) {
+      setVision({ scene: 'Camera error: ' + e.message, objects: [], hazards: [] })
+    }
+  }
+
+  function cameraOff() {
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+    setStreaming(false)
+    setAutoVision(false)
   }
 
   async function analyze() {
-    if (!videoRef.current?.videoWidth) return
+    if (!videoRef.current?.videoWidth || busy) return
     setBusy(true)
     try {
       const canvas = canvasRef.current
       canvas.width = videoRef.current.videoWidth
       canvas.height = videoRef.current.videoHeight
       canvas.getContext('2d').drawImage(videoRef.current, 0, 0)
-      const image = canvas.toDataURL('image/jpeg', 0.65)
+      const image = canvas.toDataURL('image/jpeg', 0.55)
       const result = await robotApi.visionAnalyze(cfg.id, image)
       setVision(result)
     } catch (e) { setVision({ scene: e.message, objects: [], hazards: [] }) }
     finally { setBusy(false) }
   }
 
+  useEffect(() => {
+    if (!autoVision || !streaming) return
+    const timer = setInterval(() => { analyze() }, 3500)
+    return () => clearInterval(timer)
+  }, [autoVision, streaming])
+
   return (
-    <Card title="CAMERA + VISION" tag={<span className={streaming ? 'ok' : 'dim'}>● {streaming ? 'LIVE' : (c?.status || 'STANDBY')}</span>}>
+    <Card title="CAMERA + VISION" tag={<span className={streaming ? 'ok' : 'dim'}>● {streaming ? (autoVision ? 'LIVE · AUTO VISION' : 'LIVE') : (c?.status || 'STANDBY')}</span>}>
       <video ref={videoRef} muted playsInline style={{width:'100%',display:streaming?'block':'none',borderRadius:8}} />
       {!streaming && <div className="cam"><div className="scan" /><div className="box" /><span>CAM0 · READY</span></div>}
       <canvas ref={canvasRef} style={{display:'none'}} />
       <div className="kv">
-        <button onClick={cameraOn} disabled={streaming}>Enable Camera</button>
+        {!streaming ? <button onClick={cameraOn}>Enable Camera</button> : <button onClick={cameraOff}>Disable Camera</button>}
         <button onClick={analyze} disabled={!streaming || busy}>{busy ? 'Analyzing…' : '👁 Analyze Frame'}</button>
+        <button onClick={() => setAutoVision(v => !v)} disabled={!streaming}>{autoVision ? '⏸ Auto Vision' : '▶ Auto Vision'}</button>
       </div>
-      {vision && <div className="kv"><span>Scene <b>{vision.scene}</b></span><span>Objects <b>{(vision.objects||[]).map(o=>o.label).join(', ') || 'none'}</b></span><span>Path <b>{vision.path?.direction || 'unknown'}</b></span></div>}
+      {vision && <div className="kv"><span>Scene <b>{vision.scene}</b></span><span>Objects <b>{(vision.objects||[]).map(o => o.label + (o.distance === 'near' ? ' ⚠' : '')).join(', ') || 'none'}</b></span><span>Path <b>{vision.path?.direction || 'unknown'}</b></span></div>}
+      {vision?.hazards?.length > 0 && <div className="kv"><span>Hazards <b>{vision.hazards.join(' · ')}</b></span></div>}
       <div className="kv"><span>FPS <b>{c?.fps ?? 'browser'}</b></span><span>Resolution <b>{c?.res ?? '640×480'}</b></span><span>Status <b>{c?.status ?? 'ready'}</b></span></div>
     </Card>
   )
@@ -108,7 +129,7 @@ export function ActuatorPanel({ cfg, state }) {
 }
 
 export function ControlPanel({ cfg, state, onCmd }) {
-  useEffect(() => { // wheeled robots: arrow keys + space
+  useEffect(() => {
     if (!cfg.pad) return
     const map = { ArrowUp: 'forward', ArrowDown: 'backward', ArrowLeft: 'turn_left', ArrowRight: 'turn_right', ' ': 'stop' }
     const h = e => {
