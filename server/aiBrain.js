@@ -36,6 +36,7 @@ function instinct(state, robot) {
   if (battery <= 8) return { function:'stop', arg:0, reason:'Safety instinct: critically low battery' }
   if (!state?.connected) return { function:'stop', arg:0, reason:'Safety instinct: communication lost' }
   if (front <= 8 || obstacle <= 1.2) return { function:'stop', arg:0, reason:'Safety instinct: immediate obstacle hazard' }
+  if (vision?.fused?.blocked) return { function:'stop', arg:0, reason:'Safety instinct: fused sensor + vision model reports an obstacle within the stop distance' }
   if (vision?.path?.direction === 'blocked' || (vision?.hazards?.length && vision?.path?.clear === false)) return { function:'stop', arg:0, reason:'Safety instinct: vision reports a blocked or hazardous path' }
   if ((vision?.objects || []).some(o => o.position === 'center' && o.distance === 'near')) return { function:'stop', arg:0, reason:'Safety instinct: near object detected in forward path' }
   if (robot?.type === 'bird' && altitude < 1 && /FLY|TAKEOFF/.test(state.currentCommand || '') && battery < 15) return { function:'land', arg:0, reason:'Safety instinct: low battery during flight' }
