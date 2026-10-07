@@ -17,6 +17,8 @@ const profiles = () => Object.entries(CATALOG).map(([type, e]) => ({
   type, label: e.label, defaults: { ...e.defaults, type }
 }))
 
+const discover = () => request('/api/discover')
+
 const closeStream = id => {
   const s = streams.get(id)
   if (s) {
@@ -69,6 +71,7 @@ const disconnect = async id => {
 
 export const realRobotApi = {
   profiles,
+  discover,
   connect,
   subscribe,
   sendCommand,
