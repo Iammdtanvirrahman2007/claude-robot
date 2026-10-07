@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import { buildBrain, startBrain } from './brainRunner.js'
 import { startAIBrain, stopAIBrain, aiBrainRunning, decide, personalityProfiles, commandForFunction } from './aiBrain.js'
 import { analyzeFrame } from './vision.js'
+import { createWorldModel } from './worldModel.js'
 import { CATALOG } from '../src/robots/catalog.js'
 import { toRobot } from '../src/models/robot.js'
 
@@ -117,6 +118,17 @@ function fuseVisionWithSensors(vision, state) {
   }
 }
 
+const updateWorldFromState = (r, state) => {
+  if (!r.world) return
+  r.world.updateMovement(state?.currentCommand || 'IDLE', state?.speed ?? 0, Date.now())
+  const sensors = state?.sensors || {}
+  const raw = sensors.front_distance ?? sensors.obstacle
+  const n = Number(raw)
+  const distanceCm = Number.isFinite(n) ? (sensors.obstacle != null && sensors.front_distance == null ? n * 100 : n) : null
+  if (state?.camera?.vision) r.world.observe(state.camera.vision, distanceCm)
+  state.camera = state.camera ? { ...state.camera, world: r.world.snapshot() } : { world: r.world.snapshot() }
+}
+
 const sendTcp = (r, message) => {
   if (!r.socket || r.socket.destroyed) throw new Error('ESP32 TCP connection is not open')
   r.socket.write(JSON.stringify(message) + '\n')
@@ -179,6 +191,7 @@ function attachSocket(r) {
         else if (msg.type === 'telemetry' && msg.state) {
           r.lastState = { ...msg.state, connected: true, heartbeat: r.lastSeen,
             link: { ...(msg.state.link || {}), tx: r.tx, rx: r.rx } }
+          updateWorldFromState(r, r.lastState)
           broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
           r.brain?.feed(r.lastState)
         }
@@ -469,7 +482,7 @@ const server = http.createServer(async (req, res) => {
     stopAIBrain(params.id)
     old.socket?.destroy()
   }
-      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, buildDir: null, buildBinary: null }
+      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, buildDir: null, buildBinary: null, world: createWorldModel() }
       robots.set(params.id, r)
       attachSocket(r)
       return json(res, 200, { robot: r.robot, transport: 'tcp', status: 'connecting' })
@@ -503,10 +516,18 @@ const server = http.createServer(async (req, res) => {
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
       const rawVision = await analyzeFrame(String(data.image || ''), r.lastState || {})
       const vision = fuseVisionWithSensors(rawVision, r.lastState || {})
-      r.lastState = { ...r.lastState, camera: { ...(r.lastState?.camera || {}), status: 'Vision active', vision } }
+      r.lastState = { ...r.lastState, camera: { ...(r.lastState?.camera || {}), status: 'Vision active', vision }
+      r.world.observe(vision, vision.fused?.distanceCm ?? null)
+      r.lastState.camera.world = r.world.snapshot() }
       broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
       broadcast(r.params.id, { kind: 'vision', vision })
       return json(res, 200, vision)
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/robot/world') {
+      const r = robots.get(id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      return json(res, 200, r.world?.snapshot() || null)
     }
 
     if (url.pathname === '/api/robot/ai/status') {
