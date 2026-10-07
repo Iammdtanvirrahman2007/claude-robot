@@ -33,6 +33,7 @@ jobs:
       - name: Validate bridge JavaScript
         run: |
           node --check server/bridge.js
+          node --check server/worldModel.js
           node --check server/brainRunner.js
           node --check src/api/realRobotApi.js
 
