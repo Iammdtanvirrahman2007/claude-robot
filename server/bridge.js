@@ -3,6 +3,7 @@ import net from 'node:net'
 import dgram from 'node:dgram'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { buildBrain, startBrain } from './brainRunner.js'
 import { CATALOG } from '../src/robots/catalog.js'
 import { toRobot } from '../src/models/robot.js'
 
@@ -136,6 +137,7 @@ function attachSocket(r) {
           r.lastState = { ...msg.state, connected: true, heartbeat: r.lastSeen,
             link: { ...(msg.state.link || {}), tx: r.tx, rx: r.rx } }
           broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
+          r.brain?.feed(r.lastState)
         }
         else if (msg.type === 'log') broadcast(r.params.id, { kind: 'log', line: msg.line || {
           t: new Date().toTimeString().slice(0, 8), level: 'info', text: String(msg.text || '')
@@ -418,8 +420,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/robot/connect') {
       const params = { ...data, id: String(data.id || '').trim(), type: String(data.type || ''), port: Number(data.port) || 5000 }
       if (!params.id || !params.ip) return json(res, 400, { error: 'Robot ID and IP are required' })
-      if (robots.has(params.id)) robots.get(params.id).socket?.destroy()
-      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null }
+      if (robots.has(params.id)) {
+    const old = robots.get(params.id)
+    old.brain?.stop()
+    old.socket?.destroy()
+  }
+      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, buildDir: null, buildBinary: null }
       robots.set(params.id, r)
       attachSocket(r)
       return json(res, 200, { robot: r.robot, transport: 'tcp', status: 'connecting' })
@@ -428,6 +434,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/robot/disconnect') {
       const r = robots.get(data.id)
       if (r) {
+        r.brain?.stop()
         r.socket?.destroy()
         for (const client of r.clients) client.end()
         robots.delete(data.id)
@@ -445,22 +452,84 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/robot/build') {
       const r = robots.get(data.id)
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
+
+      r.code = String(data.code || '')
       const names = new Set(r.robot.api.flatMap(g => g.fns))
       const errors = []
-      String(data.code || '').split('\n').forEach((line, i) => {
+      r.code.split('\n').forEach((line, i) => {
         for (const m of line.replace(/\/\/.*$/, '').matchAll(/robot\.([\w.]+)\(/g))
           if (!names.has(m[1])) errors.push({ line: i + 1, msg: `unknown robot API: robot.${m[1]}()` })
       })
-      return json(res, 200, { ok: errors.length === 0, errors, compiler: 'bridge-validator' })
+
+      if (errors.length) {
+        broadcast(r.params.id, { kind: 'exec', status: 'ERROR' })
+        errors.forEach(e => broadcast(r.params.id, { kind: 'log', line: {
+          t: new Date().toTimeString().slice(0, 8), level: 'error',
+          text: `brain.cpp:${e.line}: error: ${e.msg}`
+        }}))
+        return json(res, 200, { ok: false, errors, compiler: 'bridge-validator' })
+      }
+
+      r.brain?.stop()
+      const result = await buildBrain(r.code)
+      if (!result.ok) {
+        broadcast(r.params.id, { kind: 'exec', status: 'ERROR' })
+        for (const e of result.errors) broadcast(r.params.id, { kind: 'log', line: {
+          t: new Date().toTimeString().slice(0, 8), level: 'error',
+          text: `brain.cpp:${e.line}: error: ${e.msg}`
+        }})
+        return json(res, 200, {
+          ok: false, errors: result.errors, compiler: 'g++',
+          compilerOutput: result.compilerOutput
+        })
+      }
+
+      r.buildDir = result.dir
+      r.buildBinary = result.binary
+      broadcast(r.params.id, { kind: 'exec', status: 'STOPPED' })
+      broadcast(r.params.id, { kind: 'log', line: {
+        t: new Date().toTimeString().slice(0, 8), level: 'ok',
+        text: 'C++ build succeeded — native brain executable ready'
+      }})
+      return json(res, 200, { ok: true, errors: [], compiler: 'g++' })
     }
 
     if (url.pathname === '/api/robot/run') {
-      return json(res, 501, { error: 'Native C++ brain runner is not installed yet. Bridge mode currently provides real telemetry and manual command transport.' })
+      const r = robots.get(data.id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      if (!r.buildBinary) return json(res, 400, { error: 'Build brain.cpp successfully before Run' })
+
+      r.brain?.stop()
+      r.brain = startBrain({
+        binary: r.buildBinary,
+        initialState: r.lastState,
+        sendCommand: (cmd, arg) => {
+          try {
+            sendTcp(r, { type: 'command', cmd, arg: arg ?? null })
+            broadcast(r.params.id, { kind: 'log', line: {
+              t: new Date().toTimeString().slice(0, 8), level: 'info',
+              text: `Brain command: ${cmd} ${arg ?? ''}`.trim()
+            }})
+          } catch (e) {
+            broadcast(r.params.id, { kind: 'log', line: {
+              t: new Date().toTimeString().slice(0, 8), level: 'error',
+              text: `Brain command failed: ${e.message}`
+            }})
+          }
+        },
+        onLog: line => broadcast(r.params.id, { kind: 'log', line }),
+        onExec: status => broadcast(r.params.id, { kind: 'exec', status }),
+        onExit: () => { r.brain = null },
+      })
+
+      return json(res, 200, { ok: true, status: 'running', runner: 'native-cpp' })
     }
 
     if (url.pathname === '/api/robot/stop') {
       const r = robots.get(data.id)
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      r.brain?.stop()
+      r.brain = null
       sendTcp(r, { type: 'command', cmd: 'STOP', arg: null })
       broadcast(data.id, { kind: 'exec', status: 'STOPPED' })
       return json(res, 200, { ok: true })
