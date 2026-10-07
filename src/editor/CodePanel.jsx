@@ -49,8 +49,25 @@ export default function CodePanel({ bot, patch }) {
   useEffect(() => { con.current.scrollTop = con.current.scrollHeight }, [logs.length])
 
   const edit = v => patch(r => ({ ...r, files: r.files.map((f, i) => (i === tab ? { ...f, code: v } : f)) }))
-  const build = async () => { const res = await robotApi.build(cfg.id, files[0].code); setErrs(res.errors); return res.ok }
-  const run = async () => { if (!busy && (await build())) robotApi.run(cfg.id) }
+  const build = async () => {
+    try {
+      const res = await robotApi.build(cfg.id, files[0].code)
+      setErrs(res.errors || [])
+      return res.ok
+    } catch (e) {
+      setErrs([{ line: 1, msg: e.message || String(e) }])
+      return false
+    }
+  }
+  const run = async () => {
+    if (busy) return
+    if (!(await build())) return
+    try {
+      await robotApi.run(cfg.id)
+    } catch (e) {
+      setErrs([{ line: 1, msg: e.message || String(e) }])
+    }
+  }
   const save = () => { try { localStorage.setItem(filesKey(cfg), JSON.stringify(files)) } catch {} setSaved(true); setTimeout(() => setSaved(false), 1200) }
 
   const onKey = e => {
@@ -81,6 +98,7 @@ export default function CodePanel({ bot, patch }) {
         <button className="btn" onClick={save} title="Ctrl+S">{saved ? 'Saved ✓' : 'Save'}</button>
         <button className="btn" onClick={() => patch(r => ({ ...r, logs: [] }))} title="Clear console">Clear</button>
         {errs.length > 0 && <span className="pill err" style={{ marginLeft: 0 }}>{errs.length} problem{errs.length > 1 ? 's' : ''}</span>}
+        <span className="dim" style={{ marginLeft: 'auto' }}>{robotApi.mode === 'bridge' ? 'REAL TRANSPORT' : 'OFFLINE SIM'}</span>
         <span className={'pill ' + tone}>● {exec}</span>
       </div>
       <div className="steps">{STATUS.map(s => <span key={s} className={s === exec ? (s === 'ERROR' ? 'cur err' : 'cur') : ''}>● {s}</span>)}</div>
