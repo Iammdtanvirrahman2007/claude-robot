@@ -76,6 +76,47 @@ const broadcast = (id, event) => {
   for (const res of r.clients) res.write(line)
 }
 
+function fuseVisionWithSensors(vision, state) {
+  const sensors = state?.sensors || {}
+  const raw = sensors.front_distance ?? sensors.obstacle ?? null
+  const numeric = Number(raw)
+  const unit = sensors.obstacle != null && sensors.front_distance == null ? 'm' : 'cm'
+  const distanceCm = Number.isFinite(numeric) ? (unit === 'm' ? numeric * 100 : numeric) : null
+  if (distanceCm == null) return vision
+
+  const objects = [...(vision.objects || [])]
+  const center = objects.find(o => o.position === 'center')
+  if (center) {
+    center.sensorDistance = Math.round(distanceCm * 10) / 10
+    center.sensorDistanceUnit = 'cm'
+    if (distanceCm <= 20) center.distance = 'near'
+    else if (distanceCm <= 80) center.distance = 'medium'
+    else center.distance = 'far'
+  } else if (distanceCm <= 80) {
+    objects.push({
+      label: 'sensor-detected obstacle',
+      confidence: 0.65,
+      position: 'center',
+      distance: distanceCm <= 20 ? 'near' : 'medium',
+      sensorDistance: Math.round(distanceCm * 10) / 10,
+      sensorDistanceUnit: 'cm',
+    })
+  }
+
+  const sensorBlocked = distanceCm <= 15
+  return {
+    ...vision,
+    objects,
+    fused: {
+      sensor: unit === 'm' ? 'obstacle' : 'front_distance',
+      distanceCm: Math.round(distanceCm * 10) / 10,
+      blocked: sensorBlocked,
+      at: new Date().toISOString(),
+    },
+    path: sensorBlocked ? { clear: false, direction: 'blocked' } : vision.path,
+  }
+}
+
 const sendTcp = (r, message) => {
   if (!r.socket || r.socket.destroyed) throw new Error('ESP32 TCP connection is not open')
   r.socket.write(JSON.stringify(message) + '\n')
@@ -460,7 +501,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/robot/vision/analyze') {
       const r = robots.get(data.id)
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
-      const vision = await analyzeFrame(String(data.image || ''), r.lastState || {})
+      const rawVision = await analyzeFrame(String(data.image || ''), r.lastState || {})
+      const vision = fuseVisionWithSensors(rawVision, r.lastState || {})
       r.lastState = { ...r.lastState, camera: { ...(r.lastState?.camera || {}), status: 'Vision active', vision } }
       broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
       broadcast(r.params.id, { kind: 'vision', vision })
