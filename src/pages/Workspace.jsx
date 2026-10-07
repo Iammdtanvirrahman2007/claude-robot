@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { robotApi } from '../api/robotApi.js'
-import { StatusCard, SensorPanel, CameraPanel, ActuatorPanel, ControlPanel, ApiPanel, CommsPanel } from '../components/Panels.jsx'
+import { StatusCard, SensorPanel, CameraPanel, MapPanel, ActuatorPanel, ControlPanel, ApiPanel, CommsPanel } from '../components/Panels.jsx'
 import CodePanel from '../editor/CodePanel.jsx'
 
 function AIBrainPanel({ bot, patch }) {
@@ -74,6 +74,7 @@ export default function Workspace({ bot, patch }) {
         <StatusCard cfg={cfg} state={state} />
         <SensorPanel cfg={cfg} state={state} />
         {cfg.camera && <CameraPanel cfg={cfg} state={state} />}
+        <MapPanel cfg={cfg} state={state} />
         <ActuatorPanel cfg={cfg} state={state} />
       </div>
       <CodePanel bot={bot} patch={patch} />
