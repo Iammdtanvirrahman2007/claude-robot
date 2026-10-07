@@ -10,7 +10,7 @@ export function toRobot(raw, { id, ip, port }) {
   const api = [
     { title: 'Core', fns: core },
     { title: 'Movement', fns: uniq(raw.controls.map(c => c.fn)).filter(f => !core.includes(f)) },
-    { title: 'Sensors', fns: [...raw.sensors.map(s => s.fn || s.id), ...(raw.camera ? ['camera.capture'] : [])] },
+    { title: 'Sensors', fns: [...raw.sensors.map(s => s.fn || s.id), ...(raw.camera ? ['camera.capture', 'camera.detect_obstacle'] : [])] },
     { title: 'Actuators', fns: uniq(raw.actuators.map(a => ACT_FN[a.type])) },
   ].filter(g => g.fns.length)
   return { ...raw, id, ip, port, api }
