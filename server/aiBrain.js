@@ -18,18 +18,26 @@ const readMemory = async id => {
   await fs.mkdir(MEMORY_ROOT, { recursive: true })
   const file = path.join(MEMORY_ROOT, encodeURIComponent(id) + '.json')
   try { return { file, data: JSON.parse(await fs.readFile(file, 'utf8')) } }
-  catch { return { file, data: { observations: [], actions: [], preferences: {} } } }
+  catch { return { file, data: { observations: [], actions: [], preferences: {}, world: {} } } }
 }
-const writeMemory = async (file, data) => { data.observations=data.observations.slice(-80); data.actions=data.actions.slice(-120); await fs.writeFile(file, JSON.stringify(data,null,2),'utf8') }
+const writeMemory = async (file, data) => {
+  data.observations=data.observations.slice(-80)
+  data.actions=data.actions.slice(-120)
+  data.vision=data.vision?.slice(-40) || []
+  await fs.writeFile(file, JSON.stringify(data,null,2),'utf8')
+}
 
 function instinct(state, robot) {
   const battery=Number(state?.battery ?? state?.sensors?.battery ?? 100)
   const front=Number(state?.sensors?.front_distance ?? Infinity)
   const obstacle=Number(state?.sensors?.obstacle ?? Infinity)
   const altitude=Number(state?.sensors?.altitude ?? 0)
+  const vision=state?.camera?.vision
   if (battery <= 8) return { function:'stop', arg:0, reason:'Safety instinct: critically low battery' }
   if (!state?.connected) return { function:'stop', arg:0, reason:'Safety instinct: communication lost' }
   if (front <= 8 || obstacle <= 1.2) return { function:'stop', arg:0, reason:'Safety instinct: immediate obstacle hazard' }
+  if (vision?.path?.direction === 'blocked' || (vision?.hazards?.length && vision?.path?.clear === false)) return { function:'stop', arg:0, reason:'Safety instinct: vision reports a blocked or hazardous path' }
+  if ((vision?.objects || []).some(o => o.position === 'center' && o.distance === 'near')) return { function:'stop', arg:0, reason:'Safety instinct: near object detected in forward path' }
   if (robot?.type === 'bird' && altitude < 1 && /FLY|TAKEOFF/.test(state.currentCommand || '') && battery < 15) return { function:'land', arg:0, reason:'Safety instinct: low battery during flight' }
   return null
 }
@@ -41,7 +49,7 @@ function promptFor(robot,state,memory,personality) {
     'Robot type: '+robot.type+'. Available functions: '+availableFunctions(robot).join(', '),
     'Personality: '+JSON.stringify(personality),
     'Current state: '+JSON.stringify({connected:state?.connected,battery:state?.battery,command:state?.currentCommand,speed:state?.speed,sensors:state?.sensors,camera:state?.camera}),
-    'Recent memory: '+JSON.stringify({observations:memory.observations.slice(-12),actions:memory.actions.slice(-12),preferences:memory.preferences}),
+    'Recent memory: '+JSON.stringify({observations:memory.observations.slice(-12),actions:memory.actions.slice(-12),vision:(memory.vision||[]).slice(-8),preferences:memory.preferences,world:memory.world||{}}),
     'Return ONLY valid JSON: {"function":"one_available_function","arg":0-100,"reason":"short reason"}'].join('\n')
 }
 
@@ -61,6 +69,19 @@ async function askAI({robot,state,memory,personality}) {
 export async function decide({robot,state,personality='default'}) {
   const {file,data}=await readMemory(robot.id)
   const profile=typeof personality==='string'?(PERSONALITIES[personality]||PERSONALITIES.default):personality
+  if (state?.camera?.vision) {
+    data.vision = data.vision || []
+    data.vision.push({at:Date.now(), ...state.camera.vision})
+    data.world = {
+      lastScene: state.camera.vision.scene,
+      objects: state.camera.vision.objects || [],
+      people: state.camera.vision.people || 0,
+      obstacles: state.camera.vision.obstacles || 0,
+      path: state.camera.vision.path || null,
+      hazards: state.camera.vision.hazards || [],
+      updatedAt: Date.now(),
+    }
+  }
   const safe=instinct(state,robot)
   if(safe){data.actions.push({at:Date.now(),source:'instinct',...safe});await writeMemory(file,data);return {...safe,source:'instinct',personality:profile}}
   let decision
