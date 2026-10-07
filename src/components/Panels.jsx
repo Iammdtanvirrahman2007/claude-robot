@@ -123,7 +123,7 @@ export function MapPanel({ cfg, state }) {
     ...objects.map(o => ({ x: o.x, y: o.y })),
     { x: robot.x, y: robot.y },
   ]
-  const maxAbs = Math.max(120, ...points.map(p => Math.max(Math.abs(p.x), Math.abs(p.y))) + 60)
+  const maxAbs = Math.max(120, ...points.map(p => Math.max(Math.abs(p.x), Math.abs(p.y)))) + 60
   const size = maxAbs * 2
   const sx = x => x + maxAbs
   const sy = y => maxAbs - y
