@@ -4,6 +4,7 @@ import dgram from 'node:dgram'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { buildBrain, startBrain } from './brainRunner.js'
+import { startAIBrain, stopAIBrain, aiBrainRunning, decide, personalityProfiles, commandForFunction } from './aiBrain.js'
 import { CATALOG } from '../src/robots/catalog.js'
 import { toRobot } from '../src/models/robot.js'
 
@@ -423,9 +424,10 @@ const server = http.createServer(async (req, res) => {
       if (robots.has(params.id)) {
     const old = robots.get(params.id)
     old.brain?.stop()
+    stopAIBrain(params.id)
     old.socket?.destroy()
   }
-      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, buildDir: null, buildBinary: null }
+      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, buildDir: null, buildBinary: null }
       robots.set(params.id, r)
       attachSocket(r)
       return json(res, 200, { robot: r.robot, transport: 'tcp', status: 'connecting' })
@@ -435,6 +437,7 @@ const server = http.createServer(async (req, res) => {
       const r = robots.get(data.id)
       if (r) {
         r.brain?.stop()
+        stopAIBrain(data.id)
         r.socket?.destroy()
         for (const client of r.clients) client.end()
         robots.delete(data.id)
@@ -447,6 +450,52 @@ const server = http.createServer(async (req, res) => {
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
       sendTcp(r, { type: 'command', cmd: String(data.cmd || 'STOP'), arg: data.arg ?? null })
       return json(res, 200, { ok: true })
+    }
+
+    if (url.pathname === '/api/robot/ai/status') {
+      const r = robots.get(data.id || id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      return json(res, 200, { running: aiBrainRunning(r.params.id), personalities: personalityProfiles, model: process.env.ROBOT_AI_MODEL || 'gpt-6-luna', apiConfigured: Boolean(process.env.OPENAI_API_KEY) })
+    }
+
+    if (url.pathname === '/api/robot/ai/decide') {
+      const r = robots.get(data.id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      const decision = await decide({ robot: r.robot, state: r.lastState || {}, personality: data.personality || 'default' })
+      if (data.execute !== false && r.connected && decision.function) {
+        sendTcp(r, { type: 'command', cmd: commandForFunction(decision.function), arg: decision.arg ?? 0 })
+      }
+      broadcast(r.params.id, { kind: 'ai', decision })
+      return json(res, 200, decision)
+    }
+
+    if (url.pathname === '/api/robot/ai/start') {
+      const r = robots.get(data.id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      if (!process.env.OPENAI_API_KEY) return json(res, 400, { error: 'OPENAI_API_KEY is not configured on the laptop bridge' })
+      stopAIBrain(r.params.id)
+      await startAIBrain({
+        robot: r.robot,
+        getState: () => r.lastState || {},
+        personality: data.personality || 'default',
+        interval: Math.max(1200, Math.min(10000, Number(data.interval) || 2500)),
+        sendCommand: (cmd, arg) => {
+          if (!cmd || !r.connected) return
+          sendTcp(r, { type: 'command', cmd, arg: arg ?? 0 })
+        },
+        onDecision: decision => broadcast(r.params.id, { kind: 'ai', decision }),
+        onError: error => broadcast(r.params.id, { kind: 'log', line: { t: new Date().toTimeString().slice(0,8), level: 'error', text: 'AI brain: ' + error.message } }),
+      })
+      broadcast(r.params.id, { kind: 'exec', status: 'AI RUNNING' })
+      return json(res, 200, { ok: true, running: true, personality: data.personality || 'default' })
+    }
+
+    if (url.pathname === '/api/robot/ai/stop') {
+      const r = robots.get(data.id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      stopAIBrain(r.params.id)
+      broadcast(r.params.id, { kind: 'exec', status: 'STOPPED' })
+      return json(res, 200, { ok: true, running: false })
     }
 
     if (url.pathname === '/api/robot/build') {
@@ -530,6 +579,7 @@ const server = http.createServer(async (req, res) => {
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
       r.brain?.stop()
       r.brain = null
+      stopAIBrain(data.id)
       sendTcp(r, { type: 'command', cmd: 'STOP', arg: null })
       broadcast(data.id, { kind: 'exec', status: 'STOPPED' })
       return json(res, 200, { ok: true })
