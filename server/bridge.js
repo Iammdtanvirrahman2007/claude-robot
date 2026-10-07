@@ -470,7 +470,13 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    const data = ['POST'].includes(req.method) ? await body(req) : {}
+    if (req.method === 'GET' && url.pathname === '/api/robot/world') {
+      const r = robots.get(id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      return json(res, 200, r.world?.snapshot() || null)
+    }
+
+    const data = req.method === 'POST' ? await body(req) : {}
     if (req.method !== 'POST') return json(res, 404, { error: 'Not found' })
 
     if (url.pathname === '/api/robot/connect') {
@@ -516,18 +522,12 @@ const server = http.createServer(async (req, res) => {
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
       const rawVision = await analyzeFrame(String(data.image || ''), r.lastState || {})
       const vision = fuseVisionWithSensors(rawVision, r.lastState || {})
-      r.lastState = { ...r.lastState, camera: { ...(r.lastState?.camera || {}), status: 'Vision active', vision }
+      r.lastState = { ...r.lastState, camera: { ...(r.lastState?.camera || {}), status: 'Vision active', vision } }
       r.world.observe(vision, vision.fused?.distanceCm ?? null)
-      r.lastState.camera.world = r.world.snapshot() }
+      r.lastState.camera.world = r.world.snapshot()
       broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
       broadcast(r.params.id, { kind: 'vision', vision })
       return json(res, 200, vision)
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/robot/world') {
-      const r = robots.get(id)
-      if (!r) return json(res, 404, { error: 'Robot is not connected' })
-      return json(res, 200, r.world?.snapshot() || null)
     }
 
     if (url.pathname === '/api/robot/ai/status') {
