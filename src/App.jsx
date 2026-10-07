@@ -15,12 +15,13 @@ export default function App() {
     try { files = JSON.parse(localStorage.getItem(filesKey(cfg))) || files } catch {}
 
     setBots(b => ({ ...b, [cfg.id]: {
-      cfg, state: null, logs: [], exec: 'STOPPED', files, unsubscribe: null
+      cfg, state: null, logs: [], exec: 'STOPPED', ai: null, files, unsubscribe: null
     }}))
 
     const unsubscribe = robotApi.subscribe(cfg.id, ev => patch(cfg.id, r =>
       ev.kind === 'telemetry' ? { ...r, state: ev.state }
         : ev.kind === 'log' ? { ...r, logs: [...r.logs.slice(-299), ev.line] }
+        : ev.kind === 'ai' ? { ...r, ai: ev.decision }
         : { ...r, exec: ev.status }
     ))
 
