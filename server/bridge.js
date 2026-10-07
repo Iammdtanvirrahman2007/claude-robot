@@ -189,9 +189,39 @@ function parseNeighbors(text) {
 
 async function getLanDevices() {
   let neighborText = ''
+  if (process.platform === 'linux') {
+    try {
+      const r = await exec('ip', ['-4', '-o', 'addr', 'show', 'scope', 'global'], { timeout: 1200 })
+      const rows = (r.stdout || '').split(/\r?\n/).filter(Boolean)
+      const cidrs = rows.map(line => line.match(/inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+)/)).filter(Boolean)
+      const cidr = cidrs.find(m => Number(m[2]) >= 24)?.[0]
+      if (cidr) {
+        const [host, prefix] = cidr.split('/')
+        if (Number(prefix) === 24) {
+          const octets = host.split('.').map(Number)
+          const ips = Array.from({ length: 254 }, (_, i) => [...octets.slice(0, 3), i + 1].join('.'))
+          let cursor = 0
+          const alive = []
+          const workers = Array.from({ length: 48 }, async () => {
+            while (cursor < ips.length) {
+              const ip = ips[cursor++]
+              if (ip === host) continue
+              try {
+                await exec('ping', ['-c', '1', '-W', '1', ip], { timeout: 1400 })
+                alive.push(ip)
+              } catch {}
+            }
+          })
+          await Promise.all(workers)
+          neighborText = alive.map(ip => ip + ' dev lan REACHABLE').join('\n')
+        }
+      }
+    } catch {}
+  }
+
   try {
     const r = await exec('ip', ['-4', 'neigh', 'show'], { timeout: 1500 })
-    neighborText = r.stdout || ''
+    neighborText += '\n' + (r.stdout || '')
   } catch {}
   if (!neighborText) {
     try {
