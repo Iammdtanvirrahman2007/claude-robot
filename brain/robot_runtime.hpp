@@ -141,16 +141,12 @@ public:
   void print(const std::string& text) const { log(text); }
 };
 
-class CameraAPI {
-  Robot* robot_;
-public:
-  explicit CameraAPI(Robot* robot) : robot_(robot) {}
-  bool detect_obstacle() const { return robot_->obstacle() < 8.0; }
-};
-
-inline Robot::Robot() {
-  cameraPtr = nullptr;
+inline Robot::Robot() : camera(this) {
   reader_ = std::thread([this] { readLoop(); });
+}
+
+inline bool Robot::Camera::detect_obstacle() const {
+  return robot_->obstacle() < 8.0;
 }
 
 inline Robot::~Robot() {
@@ -160,4 +156,3 @@ inline Robot::~Robot() {
 }
 
 // The editor exposes robot.camera.detect_obstacle().
-
