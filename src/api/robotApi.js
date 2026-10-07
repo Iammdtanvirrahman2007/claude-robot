@@ -224,5 +224,9 @@ export const robotApi = {
   build: (...a) => active.build(...a),
   run: (...a) => active.run(...a),
   stop: (...a) => active.stop(...a),
+  aiStatus: (...a) => active === realRobotApi ? realRobotApi.aiStatus(...a) : Promise.resolve({ running:false, personalities:['default','explorer','guardian','companion'], model:'simulation', apiConfigured:false }),
+  aiDecide: (...a) => active === realRobotApi ? realRobotApi.aiDecide(...a) : Promise.resolve({ function:'stop', arg:0, source:'simulation', reason:'AI is available in Local Bridge mode' }),
+  aiStart: (...a) => active === realRobotApi ? realRobotApi.aiStart(...a) : Promise.reject(new Error('Switch to LOCAL BRIDGE mode to run the AI brain')),
+  aiStop: (...a) => active === realRobotApi ? realRobotApi.aiStop(...a) : Promise.resolve({ ok:true, running:false }),
   disconnect: (...a) => active.disconnect(...a),
 }
