@@ -292,6 +292,20 @@ async function discoverNetwork() {
       robot: robotsFound.find(r => r.ip === d.ip) || null,
     }))
 
+  for (const robot of robotsFound) {
+    if (!byIp.has(robot.ip)) {
+      network.push({
+        ip: robot.ip,
+        mac: robot.mac,
+        state: 'DISCOVERED',
+        name: robot.name,
+        kind: 'esp32',
+        robot,
+        services: [{ port: robot.port, protocol: 'tcp' }],
+      })
+    }
+  }
+
   return { devices: network, robots: robotsFound, scannedAt: new Date().toISOString() }
 }
 
