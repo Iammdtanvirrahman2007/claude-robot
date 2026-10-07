@@ -211,6 +211,7 @@ let active = localStorage.getItem('robotApiMode') === 'bridge' ? realRobotApi : 
 export const robotApi = {
   get mode() { return active === realRobotApi ? 'bridge' : 'simulation' },
   profiles,
+  discover: (...a) => active === realRobotApi ? realRobotApi.discover(...a) : Promise.resolve({ devices: [], robots: [], subnet: null, method: 'simulation' }),
   setMode(mode, bridgeUrl) {
     if (bridgeUrl) realRobotApi.setBase(bridgeUrl)
     active = mode === 'bridge' ? realRobotApi : mockRobotApi
