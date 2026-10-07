@@ -30,6 +30,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Validate bridge JavaScript
+        run: |
+          node --check server/bridge.js
+          node --check src/api/realRobotApi.js
+
       - name: Build
         run: npm run build
 
