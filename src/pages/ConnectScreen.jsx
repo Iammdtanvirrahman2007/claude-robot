@@ -9,6 +9,7 @@ export default function ConnectScreen({ onConnect, onOpen }) {
   const [busy, setBusy] = useState(false)
   const [discovering, setDiscovering] = useState(false)
   const [devices, setDevices] = useState([])
+  const [scanInfo, setScanInfo] = useState(null)
   const [res, setRes] = useState(null)
   const [err, setErr] = useState('')
 
@@ -19,7 +20,7 @@ export default function ConnectScreen({ onConnect, onOpen }) {
     const next = e.target.value
     setMode(next)
     robotApi.setMode(next, bridge)
-    setRes(null); setErr(''); setDevices([])
+    setRes(null); setErr(''); setDevices([]); setScanInfo(null)
   }
 
   async function go(list) {
@@ -42,6 +43,7 @@ export default function ConnectScreen({ onConnect, onOpen }) {
     try {
       const data = await robotApi.discover()
       setDevices(data.devices || [])
+      setScanInfo({ subnet: data.subnet, method: data.method, count: (data.devices || []).length })
       if (!(data.devices || []).length) setErr('No visible LAN devices found. Make sure the laptop and ESP32 are on the same Wi-Fi.')
     } catch (e) {
       setErr(e.message || 'Discovery failed. Is the local bridge running?')
@@ -85,7 +87,8 @@ export default function ConnectScreen({ onConnect, onOpen }) {
             {devices.length > 0 && (
               <div className="discoverBox">
                 <div className="discoverHead">
-                  <b>LOCAL NETWORK</b><span>{devices.length} device{devices.length !== 1 ? 's' : ''}</span>
+                  <b>ALL NETWORK DEVICES</b>
+                  <span>{devices.length} found{scanInfo?.subnet ? ` · ${scanInfo.subnet}` : ''}</span>
                 </div>
                 <div className="deviceList">
                   {devices.map(d => (
@@ -105,7 +108,10 @@ export default function ConnectScreen({ onConnect, onOpen }) {
                     </button>
                   ))}
                 </div>
-                <small className="discoverNote">ESP32 robots appear as green entries when their discovery service is enabled.</small>
+                <small className="discoverNote">
+                  {scanInfo?.method ? `Scan: ${scanInfo.method} · ` : ''}
+                  ESP32 robots appear first when their discovery service replies.
+                </small>
               </div>
             )}
           </>
