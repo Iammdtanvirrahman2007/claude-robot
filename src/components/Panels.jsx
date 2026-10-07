@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { robotApi } from '../api/robotApi.js'
 
 const Card = ({ title, tag, cls = '', children }) => (
   <section className={'card ' + cls}><h3>{title}{tag != null && <small>{tag}</small>}</h3>{children}</section>
@@ -41,10 +42,49 @@ export function SensorPanel({ cfg, state }) {
 
 export function CameraPanel({ cfg, state }) {
   const c = state.camera
+  const [streaming, setStreaming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const canvasRef = useRef(null)
+  const [vision, setVision] = useState(c?.vision || null)
+
+  useEffect(() => () => streamRef.current?.getTracks().forEach(t => t.stop()), [])
+
+  async function cameraOn() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
+    streamRef.current = stream
+    videoRef.current.srcObject = stream
+    await videoRef.current.play()
+    setStreaming(true)
+  }
+
+  async function analyze() {
+    if (!videoRef.current?.videoWidth) return
+    setBusy(true)
+    try {
+      const canvas = canvasRef.current
+      canvas.width = videoRef.current.videoWidth
+      canvas.height = videoRef.current.videoHeight
+      canvas.getContext('2d').drawImage(videoRef.current, 0, 0)
+      const image = canvas.toDataURL('image/jpeg', 0.65)
+      const result = await robotApi.visionAnalyze(cfg.id, image)
+      setVision(result)
+    } catch (e) { setVision({ scene: e.message, objects: [], hazards: [] }) }
+    finally { setBusy(false) }
+  }
+
   return (
-    <Card title="CAMERA" tag={<span className="ok">● {c.status}</span>}>
-      <div className="cam"><div className="scan" /><div className="box" /><span>LIVE · {cfg.id} · CAM0</span></div>
-      <div className="kv"><span>FPS <b>{c.fps}</b></span><span>Resolution <b>{c.res}</b></span><span>Status <b>{c.status}</b></span></div>
+    <Card title="CAMERA + VISION" tag={<span className={streaming ? 'ok' : 'dim'}>● {streaming ? 'LIVE' : (c?.status || 'STANDBY')}</span>}>
+      <video ref={videoRef} muted playsInline style={{width:'100%',display:streaming?'block':'none',borderRadius:8}} />
+      {!streaming && <div className="cam"><div className="scan" /><div className="box" /><span>CAM0 · READY</span></div>}
+      <canvas ref={canvasRef} style={{display:'none'}} />
+      <div className="kv">
+        <button onClick={cameraOn} disabled={streaming}>Enable Camera</button>
+        <button onClick={analyze} disabled={!streaming || busy}>{busy ? 'Analyzing…' : '👁 Analyze Frame'}</button>
+      </div>
+      {vision && <div className="kv"><span>Scene <b>{vision.scene}</b></span><span>Objects <b>{(vision.objects||[]).map(o=>o.label).join(', ') || 'none'}</b></span><span>Path <b>{vision.path?.direction || 'unknown'}</b></span></div>}
+      <div className="kv"><span>FPS <b>{c?.fps ?? 'browser'}</b></span><span>Resolution <b>{c?.res ?? '640×480'}</b></span><span>Status <b>{c?.status ?? 'ready'}</b></span></div>
     </Card>
   )
 }
