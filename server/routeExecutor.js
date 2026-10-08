@@ -44,7 +44,6 @@ export function createRouteExecutor(options = {}) {
 
     const delta = turnDelta(heading, dir.heading)
     if (Math.abs(delta) > 1) {
-      heading = normalize(heading + delta)
       return {
         command: delta > 0 ? 'TURN_RIGHT' : 'TURN_LEFT',
         arg: Math.min(180, Math.abs(delta)),
