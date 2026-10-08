@@ -106,12 +106,13 @@ async function build(id, code) {
   const source = String(code || '').trim()
   const errors = []
   if (!source) errors.push({ line: 1, msg: 'No Robot Brain code.' })
-  if (source && !/void\\s+setup\\s*\\(/.test(source)) errors.push({ line: 1, msg: 'Missing setup().' })
-  if (source && !/void\\s+loop\\s*\\(/.test(source)) errors.push({ line: 1, msg: 'Missing loop().' })
+  if (source && source.indexOf('void setup(') < 0 && source.indexOf('void setup ()') < 0)
+    errors.push({ line: 1, msg: 'Missing setup().' })
+  if (source && source.indexOf('void loop(') < 0 && source.indexOf('void loop ()') < 0)
+    errors.push({ line: 1, msg: 'Missing loop().' })
   r.subs?.forEach(fn => fn({ kind: 'exec', status: errors.length ? 'ERROR' : 'STOPPED' }))
   return { ok: !errors.length, errors }
 }
-
 async function run(id) {
   const r = live[id] ||= { subs: new Set(), seq: 0 }
   r.subs.forEach(fn => fn({ kind: 'exec', status: 'RUNNING' }))
