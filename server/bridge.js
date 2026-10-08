@@ -4,7 +4,7 @@ import dgram from 'node:dgram'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { buildBrain, startBrain } from './brainRunner.js'
-import { startAIBrain, stopAIBrain, aiBrainRunning, decide, personalityProfiles, commandForFunction } from './aiBrain.js'
+import { startAIBrain, stopAIBrain, aiBrainRunning, decide, personalityProfiles, commandForFunction, highLevelIntents } from './aiBrain.js'
 import { analyzeFrame } from './vision.js'
 import { createWorldModel } from './worldModel.js'
 import { createNavigationMap } from './navigationMap.js'
@@ -605,6 +605,11 @@ const server = http.createServer(async (req, res) => {
         sendCommand: (cmd, arg) => {
           if (!cmd || !r.connected) return
           sendTcp(r, { type: 'command', cmd, arg: arg ?? 0 })
+        },
+        resolveIntent: intent => {
+          if (intent === highLevelIntents.explore) return r.navigation?.plan(r.world?.snapshot() || {}) || { command: 'STOP', arg: 0, reason: 'no navigation plan' }
+          if (intent === highLevelIntents.hold) return { command: 'STOP', arg: 0, reason: 'AI requested hold position' }
+          return null
         },
         onDecision: decision => broadcast(r.params.id, { kind: 'ai', decision }),
         onError: error => broadcast(r.params.id, { kind: 'log', line: { t: new Date().toTimeString().slice(0,8), level: 'error', text: 'AI brain: ' + error.message } }),
