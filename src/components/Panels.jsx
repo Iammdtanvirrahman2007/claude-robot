@@ -41,7 +41,7 @@ export function SensorPanel({ cfg, state }) {
 }
 
 export function CameraPanel({ cfg, state }) {
-  const c = state.camera || {}
+  const c = state?.camera ?? {}
   const [streaming, setStreaming] = useState(false)
   const [autoVision, setAutoVision] = useState(false)
   const [busy, setBusy] = useState(false)
