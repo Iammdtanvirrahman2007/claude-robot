@@ -49,6 +49,8 @@ WiFiClient tcpClient;
 String rxLine;
 unsigned long lastTelemetry = 0;
 unsigned long lastWifiCheck = 0;
+unsigned long lastTcpActivity = 0;
+static constexpr unsigned long COMMAND_WATCHDOG_MS = 2500;
 
 int leftMotor = 0;
 int rightMotor = 0;
@@ -57,6 +59,7 @@ float frontDistance = 120.0f;
 
 void sendJson(const String& json) {
   if (tcpClient && tcpClient.connected()) {
+    lastTcpActivity = millis();
     tcpClient.print(json);
     tcpClient.print('\n');
   }
@@ -225,6 +228,7 @@ void handleTcp() {
     if (candidate) {
       tcpClient = candidate;
       rxLine = "";
+      lastTcpActivity = millis();
       sendLog("ok", "Laptop connected");
     }
     return;
@@ -239,6 +243,7 @@ void handleTcp() {
       rxLine = "";
     } else {
       if (rxLine.length() < 800) rxLine += c;
+      lastTcpActivity = millis();
     }
   }
 }
@@ -331,6 +336,11 @@ void loop() {
 
   handleDiscovery();
   handleTcp();
+
+  if (tcpClient && tcpClient.connected() && millis() - lastTcpActivity > COMMAND_WATCHDOG_MS) {
+    setMotorOutputs(0, 0);
+    currentCommand = "STOP";
+  }
 
   if (millis() - lastTelemetry >= 700) {
     lastTelemetry = millis();
