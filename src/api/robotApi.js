@@ -8,6 +8,7 @@ import { createSimulationWorld } from '../sim/worldModel.js'
 import { createAutonomyController } from '../sim/autonomy.js'
 import { createSimulationPathPlanner } from '../sim/pathPlanner.js'
 import { createSimulationRouteExecutor } from '../sim/routeExecutor.js'
+import { decideSimulationIntent, INTENTS } from '../sim/brain.js'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const rnd = (a, b) => a + Math.random() * (b - a)
@@ -179,6 +180,16 @@ async function run(id) {
       speed: r.state.speed,
       camera: { world },
     })
+    const intent = decideSimulationIntent({
+      battery: r.state.battery,
+      collision: world.collision,
+    })
+
+    if (intent.intent === INTENTS.HOLD) {
+      command(id, 'STOP', 0)
+      log(id, 'Brain: HOLD (' + intent.reason + ')', 'warn')
+      continue
+    }
 
     if (decision.command === 'STOP' && decision.reason === 'critical battery') {
       command(id, 'STOP', 0)
