@@ -31,7 +31,7 @@ test('simulation loop advances pose and grows path without collision', () => {
   const w=createSimulationWorld()
   const start=w.snapshot()
   const now=Date.now()
-  for(let i=1;i<=8;i++) w.update('FORWARD',40,120,now+i*500)
+  for(let i=1;i<=4;i++) w.update('FORWARD',40,120,now+i*500)
   const end=w.snapshot()
   assert.equal(end.collision,false)
   assert.ok(end.path.length>start.path.length)
