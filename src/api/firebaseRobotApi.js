@@ -96,7 +96,7 @@ function stateDoc(id) { return doc(db, 'robots', id, 'state', 'current') }
 function commandDoc(id) { return doc(db, 'robots', id, 'control', 'current') }
 
 function extractFunction(code, name) {
-  const marker = new RegExp('\\\\b(?:void|int|float|double|bool|long|auto)?\\\\s*' + name + '\\\\s*\\\\([^)]*\\\\)\\\\s*\\\\{')
+  const marker = new RegExp('\\b(?:void|int|float|double|bool|long|auto)?\\s*' + name + '\\s*\\([^)]*\\)\\s*\\{')
   const m = marker.exec(code)
   if (!m) return ''
   const start = code.indexOf('{', m.index)
