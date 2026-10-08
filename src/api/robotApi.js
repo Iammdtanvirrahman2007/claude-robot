@@ -194,27 +194,30 @@ async function run(id) {
       continue
     }
 
-    const cellSize = 20
+    const cellSize = world.grid?.cellSizeCm || 20
     const startCell = {
       x: Math.round(world.robot.x / cellSize),
       y: Math.round(world.robot.y / cellSize),
     }
-    const target = {
-      x: startCell.x + (world.robot.heading >= -45 && world.robot.heading < 45 ? 3 :
-        world.robot.heading >= 45 && world.robot.heading < 135 ? 3 :
-        world.robot.heading <= -45 && world.robot.heading > -135 ? -3 : 0),
-      y: startCell.y + (world.robot.heading >= -45 && world.robot.heading < 45 ? 3 : 0),
-    }
-
-    const path = r.planner.plan(world.grid, startCell, target)
+    const candidates = [
+      { x: startCell.x + 1, y: startCell.y },
+      { x: startCell.x, y: startCell.y + 1 },
+      { x: startCell.x - 1, y: startCell.y },
+      { x: startCell.x, y: startCell.y - 1 },
+    ]
+    const blocked = new Set((world.grid?.cells || [])
+      .filter(c => c.state === 'blocked')
+      .map(c => c.x + ',' + c.y))
+    const target = candidates.find(c => !blocked.has(c.x + ',' + c.y))
+    const path = target ? r.planner.plan(world.grid, startCell, target) : []
     if (!path.length) {
       command(id, decision.command, decision.arg)
       log(id, 'Navigation: no planned route, fallback to ' + decision.reason)
       continue
     }
 
-    r.route.setRoute(path, world.robot.heading)
-    const step = r.route.next()
+    if (!r.route.status().active) r.route.setRoute(path, world.robot.heading)
+    const step = r.route.next(world.robot)
     command(id, step.command, step.arg)
     log(id, 'Route: ' + step.command + (step.arg ? ' ' + step.arg : ''))
   }
