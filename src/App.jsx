@@ -15,7 +15,7 @@ export default function App() {
     try { files = JSON.parse(localStorage.getItem(filesKey(cfg))) || files } catch {}
 
     setBots(b => ({ ...b, [cfg.id]: {
-      cfg, state: null, logs: [], exec: 'STOPPED', ai: null, files, unsubscribe: null
+      cfg, state: cfg.initialState || null, logs: [], exec: 'STOPPED', ai: null, files, unsubscribe: null
     }}))
 
     const unsubscribe = robotApi.subscribe(cfg.id, ev => patch(cfg.id, r =>
@@ -47,7 +47,7 @@ export default function App() {
       <header className="top">
         <b>ROBOT CONTROL PLATFORM</b>
         <span className="dim">Laptop = brain · ESP32 = body</span>
-        <span className={'modeTag ' + robotApi.mode}>● {robotApi.mode === 'bridge' ? 'LOCAL BRIDGE' : 'SIMULATION'}</span>
+        <span className={'modeTag ' + robotApi.mode}>● {robotApi.mode === 'bridge' ? 'LOCAL BRIDGE' : robotApi.mode === 'cloud' ? 'FIRESTORE CLOUD' : 'SIMULATION'}</span>
         <span className={'pill ' + (list.length ? 'ok' : '')}>
           ● {list.length ? `${list.length} robot${list.length > 1 ? 's' : ''} connected` : 'No robot connected'}
         </span>
