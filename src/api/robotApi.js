@@ -68,6 +68,7 @@ function tick(id) {
   })
 
   if (s.camera) s.camera.fps = Math.max(1, cfg.camera.fps - Math.round(rnd(0, 2)))
+  if (cfg.camera && !s.camera) s.camera = { ...cfg.camera, status: 'Streaming', fps: cfg.camera.fps }
   s.battery = s.sensors.battery ?? null
   s.heartbeat = t
   s.link = {
