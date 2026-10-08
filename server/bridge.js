@@ -129,6 +129,15 @@ const updateWorldFromState = (r, state) => {
   state.camera = state.camera ? { ...state.camera, world: r.world.snapshot() } : { world: r.world.snapshot() }
 }
 
+const validateCommand = (r, rawCmd, rawArg) => {
+  const cmd = String(rawCmd || 'STOP').trim().toUpperCase()
+  const allowed = new Set((r.robot?.controls || []).map(x => String(x.cmd || '').toUpperCase()))
+  if (!allowed.has(cmd)) throw new Error('Command is not supported by this robot: ' + cmd)
+  const n = Number(rawArg)
+  const arg = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0
+  return { cmd, arg }
+}
+
 const sendTcp = (r, message) => {
   if (!r.socket || r.socket.destroyed) throw new Error('ESP32 TCP connection is not open')
   r.socket.write(JSON.stringify(message) + '\n')
@@ -509,8 +518,11 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/robot/command') {
       const r = robots.get(data.id)
       if (!r) return json(res, 404, { error: 'Robot is not connected' })
-      sendTcp(r, { type: 'command', cmd: String(data.cmd || 'STOP'), arg: data.arg ?? null })
-      return json(res, 200, { ok: true })
+      let command
+      try { command = validateCommand(r, data.cmd, data.arg) }
+      catch (e) { return json(res, 400, { error: e.message }) }
+      sendTcp(r, { type: 'command', cmd: command.cmd, arg: command.arg })
+      return json(res, 200, { ok: true, command })
     }
 
     if (url.pathname === '/api/robot/vision/status') {
