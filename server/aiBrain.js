@@ -12,6 +12,7 @@ const PERSONALITIES = {
   guardian: { curiosity: 0.45, caution: 0.98, obedience: 0.95, playfulness: 0.1, confidence: 0.65 },
   companion: { curiosity: 0.7, caution: 0.8, obedience: 0.98, playfulness: 0.75, confidence: 0.75 },
 }
+const INTENTS = { explore: 'EXPLORE', hold: 'HOLD' }
 const COMMANDS = { forward:'FORWARD', backward:'BACKWARD', walk_forward:'WALK_FORWARD', walk_backward:'WALK_BACKWARD', turn_left:'TURN_LEFT', turn_right:'TURN_RIGHT', stand:'STAND', sit:'SIT', takeoff:'TAKEOFF', land:'LAND', fly_forward:'FLY_FORWARD', fly_backward:'FLY_BACKWARD', increase_altitude:'INCREASE_ALTITUDE', decrease_altitude:'DECREASE_ALTITUDE', home_arm:'HOME', pick_part:'PICK_PART', place_part:'PLACE_PART', open_gripper:'OPEN_GRIPPER', close_gripper:'CLOSE_GRIPPER', conveyor_start:'CONVEYOR_START', conveyor_stop:'CONVEYOR_STOP', emergency_stop:'EMERGENCY_STOP', stop:'STOP' }
 
 const readMemory = async id => {
@@ -42,6 +43,13 @@ function instinct(state, robot) {
   if (robot?.type === 'bird' && altitude < 1 && /FLY|TAKEOFF/.test(state.currentCommand || '') && battery < 15) return { function:'land', arg:0, reason:'Safety instinct: low battery during flight' }
   return null
 }
+function intentDecision(intent, state = {}) {
+  const name = String(intent || '').toUpperCase()
+  if (name === INTENTS.explore) return { function: INTENTS.explore, arg: 0, reason: 'AI intent: autonomous exploration' }
+  if (name === INTENTS.hold) return { function: INTENTS.hold, arg: 0, reason: 'AI intent: hold position' }
+  return null
+}
+
 function availableFunctions(robot) { return (robot?.api || []).flatMap(g=>g.fns).filter(fn=>COMMANDS[fn]) }
 function fallbackAction(robot) { const fns=new Set(availableFunctions(robot)); if(fns.has('forward')) return {function:'forward',arg:35,reason:'Fallback: continue basic movement'}; if(fns.has('walk_forward')) return {function:'walk_forward',arg:30,reason:'Fallback: continue basic gait'}; if(fns.has('stand')) return {function:'stand',arg:0,reason:'Fallback: hold stable posture'}; return {function:'stop',arg:0,reason:'Fallback: no safe action available'} }
 
@@ -63,8 +71,8 @@ async function askAI({robot,state,memory,personality}) {
   const text=body.output_text || (body.output||[]).flatMap(x=>x.content||[]).map(x=>x.text||'').join('') || ''
   let parsed; try { parsed=JSON.parse(text) } catch { const m=text.match(/\{[\s\S]*\}/); parsed=m?JSON.parse(m[0]):null }
   if(!parsed?.function) throw new Error('AI returned no valid function')
-  const allowed=new Set(availableFunctions(robot)); if(!allowed.has(parsed.function)) throw new Error('AI selected unavailable function: '+parsed.function)
-  return {function:parsed.function,arg:Math.max(0,Math.min(100,Number(parsed.arg)||0)),reason:String(parsed.reason||'AI decision')}
+  const allowed=new Set(availableFunctions(robot)); const intent=intentDecision(parsed.function,state); if(!allowed.has(parsed.function) && !intent) throw new Error('AI selected unavailable function or intent: '+parsed.function)
+  return intent || {function:parsed.function,arg:Math.max(0,Math.min(100,Number(parsed.arg)||0)),reason:String(parsed.reason||'AI decision')}
 }
 
 export async function decide({robot,state,personality='default'}) {
@@ -104,3 +112,4 @@ export function stopAIBrain(id){const loop=loops.get(id);if(!loop)return false;l
 export function aiBrainRunning(id){return loops.has(id)}
 export function commandForFunction(fn){return COMMANDS[fn] || null}
 export const personalityProfiles=Object.keys(PERSONALITIES)
+export const highLevelIntents=INTENTS
