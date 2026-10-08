@@ -59,7 +59,6 @@ float frontDistance = 120.0f;
 
 void sendJson(const String& json) {
   if (tcpClient && tcpClient.connected()) {
-    lastTcpActivity = millis();
     tcpClient.print(json);
     tcpClient.print('\n');
   }
