@@ -4,11 +4,11 @@ import { STATUS, filesKey } from '../models/robot.js'
 
 // --- tiny C++-ish syntax highlighter (no dependencies, works offline) ---
 const RX = /(\/\/.*$)|("(?:[^"\\]|\\.)*")|\b(while|if|else|for|return|void|int|float|bool|auto|const|true|false|break|continue)\b|\b(\d+(?:\.\d+)?)\b|\b(robot)\b|\b([A-Za-z_]\w*)(?=\()/gm
-const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const hl = src => esc(src).replace(RX, (m, c, s, k, n, r) => `<span class="${c ? 'c' : s ? 's' : k ? 'k' : n ? 'n' : r ? 'r' : 'f'}">${m}</span>`)
 
 // brace-based re-indent
-const fmt = s => {
+const fmt = s => { s = String(s ?? '')
   let d = 0
   return s.split('\n').map(l => {
     l = l.trim()
@@ -41,17 +41,19 @@ export default function CodePanel({ bot, patch }) {
   const [errs, setErrs] = useState([])
   const [saved, setSaved] = useState(false)
   const con = useRef(null)
-  const code = files[tab].code
+  const safeFiles = Array.isArray(files) && files.length ? files : [{ name: 'brain.cpp', code: '' }]
+  const activeFile = safeFiles[tab] || safeFiles[0]
+  const code = String(activeFile?.code ?? '')
   const running = !['STOPPED', 'ERROR', 'BUILDING'].includes(exec)
   const busy = running || exec === 'BUILDING'
   const tone = exec === 'ERROR' ? 'err' : exec === 'BUILDING' ? 'warn' : exec === 'STOPPED' ? '' : 'ok'
 
   useEffect(() => { con.current.scrollTop = con.current.scrollHeight }, [logs.length])
 
-  const edit = v => patch(r => ({ ...r, files: r.files.map((f, i) => (i === tab ? { ...f, code: v } : f)) }))
+  const edit = v => patch(r => ({ ...r, files: (Array.isArray(r.files) ? r.files : safeFiles).map((f, i) => (i === tab ? { ...f, code: String(v ?? '') } : f)) }))
   const build = async () => {
     try {
-      const res = await robotApi.build(cfg.id, files[0].code)
+      const res = await robotApi.build(cfg.id, String(safeFiles[0]?.code ?? ''))
       setErrs(res.errors || [])
       return res.ok
     } catch (e) {
@@ -87,7 +89,7 @@ export default function CodePanel({ bot, patch }) {
   return (
     <section className="code">
       <div className="tabs">
-        {files.map((f, i) => <button key={f.name} className={'tab' + (i === tab ? ' on' : '')} onClick={() => setTab(i)}>{f.name}</button>)}
+        {safeFiles.map((f, i) => <button key={f.name} className={'tab' + (i === tab ? ' on' : '')} onClick={() => setTab(i)}>{f.name}</button>)}
         <small style={{ marginLeft: 'auto', paddingBottom: 6 }}>Executes on the LAPTOP — not on the ESP32</small>
       </div>
       <div className="tools">
