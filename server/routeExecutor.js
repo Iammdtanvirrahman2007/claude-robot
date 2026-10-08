@@ -27,7 +27,7 @@ export function createRouteExecutor(options = {}) {
     return status()
   }
 
-  const next = (robot = {}) => {
+  const next = (robot = {}) => {\n    if (Number.isFinite(Number(robot.heading))) heading = normalize(robot.heading)
     if (index >= route.length - 1) {
       return { command: 'STOP', arg: 0, done: true, reason: 'route complete' }
     }
