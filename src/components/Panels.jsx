@@ -117,7 +117,9 @@ export function MapPanel({ cfg, state }) {
   const obstacles = world?.obstacles || []
   const objects = world?.objects || []
   const robot = world?.robot || { x: 0, y: 0, heading: 0 }
+  const grid = world?.grid?.cells || []
   const points = [
+    ...grid.map(c => ({ x: c.x * (world?.grid?.cellSizeCm || 20), y: c.y * (world?.grid?.cellSizeCm || 20) })),
     ...path,
     ...obstacles.map(o => ({ x: o.x, y: o.y })),
     ...objects.map(o => ({ x: o.x, y: o.y })),
@@ -138,6 +140,13 @@ export function MapPanel({ cfg, state }) {
         <defs><pattern id={'grid-' + cfg.id} width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" opacity=".10" /></pattern></defs>
         <rect width="100%" height="100%" fill={'url(#grid-' + cfg.id + ')'} />
         {poly && <polyline points={poly} fill="none" stroke="currentColor" strokeWidth={2} opacity=".65" />}
+        {grid.map(c => {
+          const cs = world?.grid?.cellSizeCm || 20
+          const x = sx(c.x * cs), y = sy(c.y * cs)
+          return <rect key={c.x + ',' + c.y} x={x - cs/2} y={y - cs/2} width={cs} height={cs}
+            fill={c.state === 'blocked' ? 'currentColor' : 'none'} opacity={c.state === 'blocked' ? '.18' : '.04'}
+            stroke="currentColor" strokeWidth="1" />
+        })}
         <circle cx={sx(0)} cy={sy(0)} r="4" fill="currentColor" opacity=".35" />
         {obstacles.map(o => <g key={o.id}><circle cx={sx(o.x)} cy={sy(o.y)} r={Math.max(5, Math.min(11, 10 - o.distanceCm / 30))} fill="currentColor" opacity=".9" /><text x={sx(o.x)+9} y={sy(o.y)-8} fontSize="10" fill="currentColor">{o.label}</text></g>)}
         {objects.filter(o => !obstacles.some(b => b.id === o.id)).map(o => <circle key={o.id} cx={sx(o.x)} cy={sy(o.y)} r="5" fill="currentColor" opacity=".55" />)}
@@ -147,6 +156,8 @@ export function MapPanel({ cfg, state }) {
         <span>Robot <b>{robot.x.toFixed(0)}, {robot.y.toFixed(0)} cm</b></span>
         <span>Heading <b>{robot.heading.toFixed(0)}°</b></span>
         <span>Obstacles <b>{obstacles.length}</b></span>
+        <span>Grid cells <b>{grid.length}</b></span>
+        <span className={world?.collision ? 'err' : ''}>Collision <b>{world?.collision ? 'STOP' : 'CLEAR'}</b></span>
         <span>Objects <b>{objects.length}</b></span>
       </div>
       <small className="dim">Approximate local map from movement + distance/vision data. Odometry/IMU will improve accuracy.</small>
