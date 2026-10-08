@@ -1,3 +1,4 @@
+import { createPathPlanner } from './pathPlanner.js'
 const CELL = 20
 const MAX_CELLS = 6000
 const DIRS = [
@@ -15,6 +16,7 @@ export function createNavigationMap(options = {}) {
   const cells = new Map()
   const visits = new Map()
   const blocked = new Set()
+  const planner = createPathPlanner({ maxNodes: 5000 })
 
   const mark = (x, y, type = 'free', confidence = 0.5) => {
     const c = cellOf(x, y), k = key(c.x, c.y)
@@ -56,12 +58,13 @@ export function createNavigationMap(options = {}) {
 
   const plan = (world = {}) => {
     const target = chooseTarget(world)
-    if (!target) return { command: 'STOP', arg: 0, reason: 'navigation: no safe neighboring cell' }
+    if (!target) return { command: 'STOP', arg: 0, reason: 'navigation: no safe neighboring cell', path: [] }
+    const route = planner.plan(snapshot(), cellOf(world.robot?.x || 0, world.robot?.y || 0), { x: target.x, y: target.y })
     const r = cellOf(world.robot?.x || 0, world.robot?.y || 0)
-    if (target.x === r.x && target.y === r.y + 1) return { command: 'FORWARD', arg: 40, reason: 'navigation: unexplored north cell' }
-    if (target.x === r.x && target.y === r.y - 1) return { command: 'BACKWARD', arg: 30, reason: 'navigation: unexplored south cell' }
-    if (target.x > r.x) return { command: 'TURN_RIGHT', arg: 90, reason: 'navigation: explore east' }
-    return { command: 'TURN_LEFT', arg: 90, reason: 'navigation: explore west' }
+    if (target.x === r.x && target.y === r.y + 1) return { command: 'FORWARD', arg: 40, reason: 'navigation: route to unexplored north cell', path: route }
+    if (target.x === r.x && target.y === r.y - 1) return { command: 'BACKWARD', arg: 30, reason: 'navigation: route to unexplored south cell', path: route }
+    if (target.x > r.x) return { command: 'TURN_RIGHT', arg: 90, reason: 'navigation: route to explore east', path: route }
+    return { command: 'TURN_LEFT', arg: 90, reason: 'navigation: route to explore west', path: route }
   }
 
   const snapshot = () => ({
