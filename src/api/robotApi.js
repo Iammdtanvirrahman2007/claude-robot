@@ -6,6 +6,8 @@ import { toRobot } from '../models/robot.js'
 import { realRobotApi } from './realRobotApi.js'
 import { createSimulationWorld } from '../sim/worldModel.js'
 import { createAutonomyController } from '../sim/autonomy.js'
+import { createSimulationPathPlanner } from '../sim/pathPlanner.js'
+import { createSimulationRouteExecutor } from '../sim/routeExecutor.js'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const rnd = (a, b) => a + Math.random() * (b - a)
@@ -99,7 +101,7 @@ async function connect({ type, id, ip, port }) {
   await sleep(450)
   const cfg = toRobot(raw, { id: id.trim(), ip, port: Number(port) || 5000 })
   if (live[cfg.id]?.timer) clearInterval(live[cfg.id].timer)
-  live[cfg.id] = { cfg, state: initState(cfg), subs: new Set(), timer: null, token: null, world: createSimulationWorld(), autonomy: createAutonomyController() }
+  live[cfg.id] = { cfg, state: initState(cfg), subs: new Set(), timer: null, token: null, world: createSimulationWorld(), autonomy: createAutonomyController(), planner: createSimulationPathPlanner(), route: createSimulationRouteExecutor() }
   live[cfg.id].timer = setInterval(() => tick(cfg.id), 600)
   return cfg
 }
@@ -160,34 +162,59 @@ async function run(id) {
   if (r.token) return
 
   const tk = (r.token = { stop: false })
-  const b = r.cfg.brain
-  const d = r.cfg.sensors.find(s => s.id === b.sensor)
-  const nap = async ms => { await sleep(ms); return tk.stop }
-
   setExec(id, 'RUNNING')
-  log(id, 'Program started')
-  log(id, 'Mode: SIMULATION')
+  log(id, 'Autonomous simulation started')
+  log(id, 'Pipeline: sensors → world map → A* → route executor → movement')
 
   while (!tk.stop) {
-    setExec(id, 'WAITING FOR SENSOR DATA')
-    if (await nap(650)) return
+    if (await sleep(500), tk.stop) return
 
-    const v = r.state.sensors[b.sensor]
-    const hit = v < b.lt
-    const [cmd, arg] = hit ? b.hit : b.miss
-    log(id, `${d.name} = ${Math.round(v)} ${d.unit}`)
-    if (hit) log(id, `Decision: ${cmd}`)
+    const world = r.world.snapshot()
+    const front = Number(r.state.sensors.front_distance ?? Infinity)
+    const decision = r.autonomy.decide({
+      sensors: { front_distance: front, battery: r.state.battery },
+      battery: r.state.battery,
+      speed: r.state.speed,
+      camera: { world },
+    })
 
-    setExec(id, 'SENDING COMMAND')
-    if (await nap(250)) return
+    if (decision.command === 'STOP' && decision.reason === 'critical battery') {
+      command(id, 'STOP', 0)
+      log(id, 'Safety stop: critical battery', 'warn')
+      continue
+    }
 
-    command(id, cmd, arg)
-    log(id, `Command: ${cmd} ${arg}`)
+    r.state.camera = r.state.camera ? { ...r.state.camera, world } : { world }
 
-    setExec(id, 'ROBOT EXECUTING')
-    if (await nap(900)) return
+    if (front <= 28) {
+      command(id, decision.command, decision.arg)
+      log(id, 'Navigation: ' + decision.reason)
+      continue
+    }
 
-    if (hit) r.state.sensors[b.sensor] = b.lt + rnd(25, 70)
+    const cellSize = 20
+    const startCell = {
+      x: Math.round(world.robot.x / cellSize),
+      y: Math.round(world.robot.y / cellSize),
+    }
+    const target = {
+      x: startCell.x + (world.robot.heading >= -45 && world.robot.heading < 45 ? 3 :
+        world.robot.heading >= 45 && world.robot.heading < 135 ? 3 :
+        world.robot.heading <= -45 && world.robot.heading > -135 ? -3 : 0),
+      y: startCell.y + (world.robot.heading >= -45 && world.robot.heading < 45 ? 3 : 0),
+    }
+
+    const path = r.planner.plan(world.grid, startCell, target)
+    if (!path.length) {
+      command(id, decision.command, decision.arg)
+      log(id, 'Navigation: no planned route, fallback to ' + decision.reason)
+      continue
+    }
+
+    r.route.setRoute(path, world.robot.heading)
+    const step = r.route.next()
+    command(id, step.command, step.arg)
+    log(id, 'Route: ' + step.command + (step.arg ? ' ' + step.arg : ''))
   }
 }
 
