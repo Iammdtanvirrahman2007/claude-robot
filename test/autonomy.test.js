@@ -25,3 +25,21 @@ test('autonomy recovers from a stuck robot', () => {
   const d = a.observe(state(100,0,0,'FORWARD',45))
   assert.ok(['TURN_LEFT','TURN_RIGHT'].includes(d.command))
 })
+
+test('autonomy stops when world model reports collision', () => {
+  const a = createAutonomyController()
+  const s = state(100, 0, 0)
+  s.camera.world.collision = true
+  const d = a.decide(s)
+  assert.equal(d.command, 'STOP')
+  assert.equal(d.priority, 100)
+})
+
+test('autonomy marks critical battery as highest safety stop', () => {
+  const a = createAutonomyController()
+  const s = state(100, 0, 0)
+  s.battery = 5
+  const d = a.decide(s)
+  assert.equal(d.command, 'STOP')
+  assert.equal(d.priority, 100)
+})
