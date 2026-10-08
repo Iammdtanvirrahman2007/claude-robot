@@ -25,3 +25,15 @@ test('virtual world exposes explored grid and objects', () => {
   assert.ok(s.grid.cells.some(c=>c.state==='free'))
   assert.ok(s.objects.some(o=>o.id==='crate'))
 })
+
+
+test('simulation loop advances pose and grows path without collision', () => {
+  const w=createSimulationWorld()
+  const start=w.snapshot()
+  const now=Date.now()
+  for(let i=1;i<=8;i++) w.update('FORWARD',40,120,now+i*500)
+  const end=w.snapshot()
+  assert.equal(end.collision,false)
+  assert.ok(end.path.length>start.path.length)
+  assert.ok(end.grid.cells.length>=start.grid.cells.length)
+})
