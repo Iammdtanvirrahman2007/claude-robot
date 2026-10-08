@@ -65,8 +65,13 @@ private:
   }
 
   void command(const std::string& cmd, int arg = 0) const {
+    if (!connected() && cmd != "STOP" && cmd != "EMERGENCY_STOP") {
+      log("Command blocked: robot is offline");
+      return;
+    }
+    const int safeArg = arg < 0 ? 0 : (arg > 100 ? 100 : arg);
     std::cout << "{\"type\":\"command\",\"cmd\":\"" << cmd
-              << "\",\"arg\":" << arg << "}" << std::endl;
+              << "\",\"arg\":" << safeArg << "}" << std::endl;
   }
 
   void log(const std::string& text) const {
