@@ -26,9 +26,10 @@ export function SensorPanel({ cfg, state }) {
       {cfg.sensors.map(s => {
         const v = state.sensors?.[s.id] ?? s.v ?? 0
         let val
-        if (s.type === 'imu') { const iv = v && typeof v === 'object' ? v : { x: 0, y: 0, z: 0 }; val = <span className="vec">{['x', 'y', 'z'].map(k => { const n = Number(iv[k] ?? 0); return <em key={k}>{k.toUpperCase()}<b>{Number.isFinite(n) ? n.toFixed(2) : '0.00'}</b></em> })}</span>
+        if (s.type === 'imu') { const iv = v && typeof v === 'object' ? v : { x: 0, y: 0, z: 0 }; val = <span className="vec">{['x', 'y', 'z'].map(k => { const n = Number(iv[k] ?? 0); return <em key={k}>{k.toUpperCase()}<b>{Number.isFinite(n) ? n.toFixed(2) : '0.00'}</b></em> })}</span> }
         else if (s.type === 'gps') { const lat = Number(v?.lat ?? 0), lon = Number(v?.lon ?? 0); const t = `${lat.toFixed(5)}, ${lon.toFixed(5)}`; val = <b key={t}>{t}</b> }
-        else if (s.type === 'digital') { val = <b>{Boolean(v) ? 'ON' : 'OFF'} <small>{s.unit}</small></b> } else { const n = Number(v); const t = (Number.isFinite(n) ? n : 0).toFixed(s.type === 'temperature' || s.type === 'torque' ? 1 : 0); val = <b key={t}>{t} <small>{s.unit}</small></b> }
+        else if (s.type === 'digital') { val = <b>{Boolean(v) ? 'ON' : 'OFF'} <small>{s.unit}</small></b> }
+        else { const n = Number(v); const t = (Number.isFinite(n) ? n : 0).toFixed(s.type === 'temperature' || s.type === 'torque' ? 1 : 0); val = <b key={t}>{t} <small>{s.unit}</small></b> }
         return (
           <div className="row" key={s.id}>
             <span>{s.name}</span>{val}
