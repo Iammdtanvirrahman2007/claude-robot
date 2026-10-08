@@ -65,7 +65,7 @@ void sendJson(const String& json) {
 void sendLog(const String& level, const String& text) {
   String safe = text;
   safe.replace("\\", "\\\\");
-  safe.replace(""", "\\"");
+  safe.replace("\"", "\\\"");
   sendJson(
     "{\"type\":\"log\",\"line\":{\"t\":\"ESP\",\"level\":\"" +
     level + "\",\"text\":\"" + safe + "\"}}"
