@@ -131,7 +131,8 @@ const updateWorldFromState = (r, state) => {
 
 const validateCommand = (r, rawCmd, rawArg) => {
   const cmd = String(rawCmd || 'STOP').trim().toUpperCase()
-  const allowed = new Set((r.robot?.controls || []).map(x => String(x.cmd || '').toUpperCase()))
+  const controls = r.robot?.controls?.length ? r.robot.controls : (CATALOG[r.params.type]?.controls || [])
+  const allowed = new Set(controls.map(x => String(x.cmd || '').toUpperCase()))
   if (!allowed.has(cmd)) throw new Error('Command is not supported by this robot: ' + cmd)
   const n = Number(rawArg)
   const arg = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0
