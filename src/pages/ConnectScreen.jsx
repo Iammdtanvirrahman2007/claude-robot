@@ -37,6 +37,28 @@ export default function ConnectScreen({ onConnect, onOpen }) {
     }
   }
 
+  async function openVirtualEnvironment() {
+    const virtual = {
+      id: 'VESP32-01',
+      ip: '127.0.0.1',
+      port: 5000,
+      type: 'wheeled',
+      mode: 'bridge',
+    }
+    try {
+      setBusy(true); setErr(''); setRes(null)
+      robotApi.setMode('bridge', bridge)
+      setMode('bridge')
+      const result = await onConnect(virtual)
+      setRes(result)
+      if (result) setTimeout(() => onOpen(result.id), 250)
+    } catch (e) {
+      setErr(e.message || 'Virtual ESP32 test failed. Start ./virtual-esp32 first.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function discover() {
     if (mode !== 'bridge') return
     setDiscovering(true); setErr('')
@@ -128,7 +150,11 @@ export default function ConnectScreen({ onConnect, onOpen }) {
         <label>Port<input value={f.port} onChange={set('port')} inputMode="numeric" /></label>
 
         {err && <div className="cardError">✖ {err}</div>}
-        <button className="btn pri" disabled={busy}>{busy ? 'CONNECTING…' : 'CONNECT'}</button>
+        <button type="button" className="btn pri" disabled={busy} onClick={openVirtualEnvironment}>
+          {busy ? 'OPENING…' : '🤖 VIRTUAL ENVIRONMENT ROBOT TEST'}
+        </button>
+        <small className="dim">Runs the VESP32-01 rover from the virtual-esp-32 repository through the local bridge at 127.0.0.1:5000.</small>
+        <button className="btn" disabled={busy}>{busy ? 'CONNECTING…' : 'CONNECT'}</button>
         <button type="button" className="btn" disabled={busy || mode === 'bridge'}
           onClick={() => go(profiles.map(p => p.defaults))}>Connect all 4 demo robots</button>
       </form>
