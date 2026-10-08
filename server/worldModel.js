@@ -131,6 +131,16 @@ export function createWorldModel() {
     return snapshot()
   }
 
+  function setPose(pose = {}) {
+    const px = Number(pose.x), py = Number(pose.y), ph = Number(pose.heading)
+    if (Number.isFinite(px)) model.x = px
+    if (Number.isFinite(py)) model.y = py
+    if (Number.isFinite(ph)) model.heading = normalizeHeading(ph)
+    const last = model.path[model.path.length - 1]
+    if (!last || Math.hypot(model.x - last.x, model.y - last.y) >= 2) model.path.push({ x: model.x, y: model.y })
+    model.lastUpdate = Date.now()
+  }
+
   function snapshot() {
     const now = Date.now()
     prune(now)
@@ -147,5 +157,5 @@ export function createWorldModel() {
     }
   }
 
-  return { updateMovement, observe, snapshot }
+  return { updateMovement, observe, setPose, snapshot }
 }
