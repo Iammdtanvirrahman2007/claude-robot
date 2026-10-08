@@ -176,11 +176,11 @@ async function runSketch(id, code) {
 
   const execute = async body => {
     const js = sanitizeSketch(body)
-      .replace(/\\bdelay\\s*\\(/g, 'await delay(')
+      .replace(/\bdelay\s*\(/g, 'await delay(')
     const fn = new Function(
       'readUltrasonic', 'pinMode', 'digitalWrite', 'analogWrite', 'delay',
       'robot', 'Serial', 'sendCommand', 'console',
-      'return (async () => {' + js + '\\n})()'
+      'return (async () => {' + js + '\n})()'
     )
     return fn(readUltrasonic, pinMode, digitalWrite, analogWrite, delay, robot, Serial, sendCommand, undefined)
   }
