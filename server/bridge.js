@@ -184,6 +184,11 @@ function attachSocket(r) {
       errors: [], link: { latency: 0, rssi: 0, tx: r.tx, rx: r.rx }, heartbeat: r.lastSeen
     }
     try { sendTcp(r, { type: 'hello', id: r.params.id, protocol: 1 }) } catch {}
+    if (r.telemetryTimer) clearInterval(r.telemetryTimer)
+    r.telemetryTimer = setInterval(() => {
+      if (!r.connected || !r.socket || r.socket.destroyed) return
+      try { sendTcp(r, 'GET_TELEMETRY') } catch {}
+    }, 500)
     broadcast(r.params.id, { kind: 'telemetry', state: r.lastState })
     broadcast(r.params.id, { kind: 'log', line: {
       t: new Date().toTimeString().slice(0, 8), level: 'ok',
@@ -230,6 +235,7 @@ function attachSocket(r) {
 
   socket.on('close', () => {
     r.connected = false
+    if (r.telemetryTimer) { clearInterval(r.telemetryTimer); r.telemetryTimer = null }
     broadcast(r.params.id, { kind: 'log', line: {
       t: new Date().toTimeString().slice(0, 8), level: 'warn',
       text: 'ESP32 TCP connection closed',
@@ -503,7 +509,7 @@ const server = http.createServer(async (req, res) => {
     stopAIBrain(params.id)
     old.socket?.destroy()
   }
-      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, buildDir: null, buildBinary: null, world: createWorldModel(), navigation: createNavigationMap(), planner: createPathPlanner(), route: createRouteExecutor() }
+      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, telemetryTimer: null, buildDir: null, buildBinary: null, world: createWorldModel(), navigation: createNavigationMap(), planner: createPathPlanner(), route: createRouteExecutor() }
       robots.set(params.id, r)
       attachSocket(r)
       return json(res, 200, { robot: r.robot, transport: 'tcp', status: 'connecting' })
@@ -515,6 +521,7 @@ const server = http.createServer(async (req, res) => {
         r.brain?.stop()
         stopAIBrain(data.id)
         r.socket?.destroy()
+        if (r.telemetryTimer) { clearInterval(r.telemetryTimer); r.telemetryTimer = null }
         for (const client of r.clients) client.end()
         robots.delete(data.id)
       }
