@@ -27,7 +27,9 @@ export function createRouteExecutor(options = {}) {
     return status()
   }
 
-  const next = (robot = {}) => {\n    if (Number.isFinite(Number(robot.heading))) heading = normalize(robot.heading)
+  const next = (robot = {}) => {
+    if (Number.isFinite(Number(robot.heading))) heading = normalize(robot.heading)
+
     if (index >= route.length - 1) {
       return { command: 'STOP', arg: 0, done: true, reason: 'route complete' }
     }
@@ -37,12 +39,14 @@ export function createRouteExecutor(options = {}) {
     const dx = Math.sign(target.x - current.x)
     const dy = Math.sign(target.y - current.y)
     const dir = DIRS.find(d => d.x === dx && d.y === dy)
+
     if (!dir) {
       index++
       return { command: 'STOP', arg: 0, done: false, reason: 'invalid route segment' }
     }
 
     const delta = turnDelta(heading, dir.heading)
+
     if (Math.abs(delta) > 1) {
       return {
         command: delta > 0 ? 'TURN_RIGHT' : 'TURN_LEFT',
