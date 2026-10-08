@@ -20,6 +20,24 @@ const cfg = {
     { id: 'motor_r', type: 'motor', v: 0 }
   ],
   camera: false,
+  panels: { sensors: 'SENSORS', actuators: 'DRIVE' },
+  pad: true,
+  sensors: [
+    { id: 'front_distance', name: 'Front Distance', type: 'distance', unit: 'cm', v: 250, min: 0, max: 250 },
+    { id: 'collision', name: 'Collision', type: 'digital', unit: '', v: false },
+    { id: 'battery', name: 'Battery', type: 'battery', unit: '%', v: 100, min: 0, max: 100 }
+  ],
+  actuators: [
+    { id: 'motor_l', name: 'Left Motor', type: 'motor', unit: '%', v: 0 },
+    { id: 'motor_r', name: 'Right Motor', type: 'motor', unit: '%', v: 0 }
+  ],
+  controls: [
+    { label: '↑', fn: 'forward', cmd: 'FORWARD', pos: '1 / 2' },
+    { label: '←', fn: 'turn_left', cmd: 'TURN_LEFT', pos: '2 / 1' },
+    { label: '■', fn: 'stop', cmd: 'STOP', pos: '2 / 2' },
+    { label: '→', fn: 'turn_right', cmd: 'TURN_RIGHT', pos: '2 / 3' },
+    { label: '↓', fn: 'backward', cmd: 'BACKWARD', pos: '3 / 2' }
+  ],
   api: [{ group: 'drive', fns: ['forward', 'backward', 'turnLeft', 'turnRight', 'stop'] }]
 }
 
