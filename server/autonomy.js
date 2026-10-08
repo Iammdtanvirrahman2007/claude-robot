@@ -23,8 +23,9 @@ export function createAutonomyController(options = {}) {
     const moving = /FORWARD|BACKWARD|WALK_|FLY_/.test(current) && Number(state.speed) > 0
     const pose = state.camera?.world?.robot
 
-    if (battery <= 8) return { command: 'STOP', arg: 0, reason: 'critical battery' }
-    if (front <= cfg.emergencyCm) return { command: 'STOP', arg: 0, reason: 'emergency obstacle distance' }
+    if (battery <= 8) return { command: 'STOP', arg: 0, reason: 'critical battery', priority: 100 }
+    if (state.collision || state.camera?.world?.collision) return { command: 'STOP', arg: 0, reason: 'collision detected', priority: 100 }
+    if (front <= cfg.emergencyCm) return { command: 'STOP', arg: 0, reason: 'emergency obstacle distance', priority: 100 }
 
     if (moving && pose && last) {
       const progress = Math.hypot(pose.x - last.x, pose.y - last.y)
