@@ -111,7 +111,7 @@ function extractFunction(code, name) {
 function extractLoopBody(code) {
   const body = extractFunction(code, 'loop')
   const trimmed = body.trim()
-  if (!/^while\\s*\\(/.test(trimmed)) return body
+  if (!/^while\s*\(/.test(trimmed)) return body
   const brace = trimmed.indexOf('{', trimmed.indexOf(')'))
   if (brace < 0) return body
   let depth = 0
@@ -123,17 +123,17 @@ function extractLoopBody(code) {
 }
 
 function sanitizeSketch(code) {
-  const blocked = /\\b(?:window|document|globalThis|localStorage|sessionStorage|fetch|XMLHttpRequest|WebSocket|indexedDB|eval|Function|import|firebase|location|cookie|navigator)\\b/i
+  const blocked = /\b(?:window|document|globalThis|localStorage|sessionStorage|fetch|XMLHttpRequest|WebSocket|indexedDB|eval|Function|import|firebase|location|cookie|navigator)\b/i
   if (blocked.test(code)) throw new Error('Sketch contains a blocked browser API')
   return String(code || '')
-    .replace(/#include[^\\n]*\\n/g, '')
-    .replace(/\\/\\*[\\s\\S]*?\\*\\//g, '')
-    .replace(/\\/\\/.*$/gm, '')
-    .replace(/\\b(?:int|float|double|bool|long|short|unsigned|byte|auto|const)\\s+/g, '')
-    .replace(/\\bHIGH\\b/g, '1')
-    .replace(/\\bLOW\\b/g, '0')
-    .replace(/\\bOUTPUT\\b/g, '1')
-    .replace(/\\bINPUT(?:_PULLUP)?\\b/g, '0')
+    .replace(/#include[^\n]*\n/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+    .replace(/\b(?:int|float|double|bool|long|short|unsigned|byte|auto|const)\s+/g, '')
+    .replace(/\bHIGH\b/g, '1')
+    .replace(/\bLOW\b/g, '0')
+    .replace(/\bOUTPUT\b/g, '1')
+    .replace(/\bINPUT(?:_PULLUP)?\b/g, '0')
 }
 
 async function runSketch(id, code) {
