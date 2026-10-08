@@ -20,7 +20,9 @@ test('route executor stops at the end', () => {
   assert.equal(e.next().command, 'STOP')
   assert.equal(e.next().done, true)
 })
-\n\ntest('route executor waits for telemetry heading after a turn', () => {
+
+
+test('route executor waits for telemetry heading after a turn', () => {
   const e = createRouteExecutor()
   e.setRoute([{ x: 0, y: 0 }, { x: 1, y: 0 }], 0)
   assert.equal(e.next().command, 'TURN_RIGHT')
