@@ -37,6 +37,9 @@ jobs:
           node --check server/brainRunner.js
           node --check src/api/realRobotApi.js
 
+      - name: Run unit tests
+        run: npm test
+
       - name: Smoke test native C++ runtime
         run: |
           cat > /tmp/brain-smoke.cpp <<'EOF'
