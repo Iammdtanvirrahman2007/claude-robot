@@ -170,7 +170,8 @@ async function run(id) {
     if (await sleep(500), tk.stop) return
 
     const world = r.world.snapshot()
-    const front = Number(r.state.sensors.front_distance ?? Infinity)
+    const front = Number(r.world.snapshot().frontDistance ?? r.state.sensors.front_distance ?? Infinity)
+    r.state.sensors.front_distance = front
     const decision = r.autonomy.decide({
       sensors: { front_distance: front, battery: r.state.battery },
       battery: r.state.battery,
