@@ -146,7 +146,8 @@ const validateCommand = (r, rawCmd, rawArg) => {
 
 const sendTcp = (r, message) => {
   if (!r.socket || r.socket.destroyed) throw new Error('ESP32 TCP connection is not open')
-  r.socket.write(JSON.stringify(message) + '\n')
+  const payload = typeof message === 'string' ? message : JSON.stringify(message)
+  r.socket.write(payload + '\n')
   r.tx++
 }
 
