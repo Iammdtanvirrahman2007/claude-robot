@@ -4,6 +4,7 @@
 import { CATALOG } from '../robots/catalog.js'
 import { toRobot } from '../models/robot.js'
 import { realRobotApi } from './realRobotApi.js'
+import { firebaseRobotApi } from './firebaseRobotApi.js'
 import { createSimulationWorld } from '../sim/worldModel.js'
 import { createAutonomyController } from '../sim/autonomy.js'
 import { createSimulationPathPlanner } from '../sim/pathPlanner.js'
@@ -257,16 +258,16 @@ function disconnect(id) {
 
 export const mockRobotApi = { mode: 'simulation', profiles, connect, subscribe, sendCommand, build, run, stop, disconnect }
 
-let active = localStorage.getItem('robotApiMode') === 'bridge' ? realRobotApi : mockRobotApi
+let active = localStorage.getItem('robotApiMode') === 'cloud' ? firebaseRobotApi : (localStorage.getItem('robotApiMode') === 'bridge' ? realRobotApi : mockRobotApi)
 
 export const robotApi = {
-  get mode() { return active === realRobotApi ? 'bridge' : 'simulation' },
+  get mode() { return active === firebaseRobotApi ? 'cloud' : (active === realRobotApi ? 'bridge' : 'simulation') },
   profiles,
-  discover: (...a) => active === realRobotApi ? realRobotApi.discover(...a) : Promise.resolve({ devices: [], robots: [], subnet: null, method: 'simulation' }),
+  discover: (...a) => active === firebaseRobotApi ? firebaseRobotApi.discover(...a) : (active === realRobotApi ? realRobotApi.discover(...a) : Promise.resolve({ devices: [], robots: [], subnet: null, method: 'simulation' })),
   setMode(mode, bridgeUrl) {
     if (bridgeUrl) realRobotApi.setBase(bridgeUrl)
-    active = mode === 'bridge' ? realRobotApi : mockRobotApi
-    localStorage.setItem('robotApiMode', active === realRobotApi ? 'bridge' : 'simulation')
+    active = mode === 'cloud' ? firebaseRobotApi : (mode === 'bridge' ? realRobotApi : mockRobotApi)
+    localStorage.setItem('robotApiMode', active === firebaseRobotApi ? 'cloud' : (active === realRobotApi ? 'bridge' : 'simulation'))
   },
   getBridgeUrl: () => realRobotApi.getBase(),
   connect: (...a) => active.connect(...a),
@@ -275,10 +276,10 @@ export const robotApi = {
   build: (...a) => active.build(...a),
   run: (...a) => active.run(...a),
   stop: (...a) => active.stop(...a),
-  world: (...a) => active === realRobotApi ? realRobotApi.world(...a) : Promise.resolve(null),
-  visionStatus: (...a) => active === realRobotApi ? realRobotApi.visionStatus(...a) : Promise.resolve({ model:'simulation', apiConfigured:false }),
-  visionAnalyze: (...a) => active === realRobotApi ? realRobotApi.visionAnalyze(...a) : Promise.reject(new Error('Switch to LOCAL BRIDGE mode to analyze camera frames')),
-  aiStatus: (...a) => active === realRobotApi ? realRobotApi.aiStatus(...a) : Promise.resolve({ running:false, personalities:['default','explorer','guardian','companion'], model:'simulation', apiConfigured:false }),
+  world: (...a) => active === firebaseRobotApi ? firebaseRobotApi.world(...a) : (active === realRobotApi ? realRobotApi.world(...a) : Promise.resolve(null)),
+  visionStatus: (...a) => active === realRobotApi ? realRobotApi.visionStatus(...a) : Promise.resolve({ model:active === firebaseRobotApi ? 'cloud' : 'simulation', apiConfigured:false }),
+  visionAnalyze: (...a) => active === realRobotApi ? realRobotApi.visionAnalyze(...a) : Promise.reject(new Error('Camera analysis is not available in cloud virtual mode')),
+  aiStatus: (...a) => active === realRobotApi ? realRobotApi.aiStatus(...a) : Promise.resolve({ running:false, personalities:['default','explorer','guardian','companion'], model:active === firebaseRobotApi ? 'cloud' : 'simulation', apiConfigured:false }),
   aiDecide: (...a) => active === realRobotApi ? realRobotApi.aiDecide(...a) : Promise.resolve({ function:'stop', arg:0, source:'simulation', reason:'AI is available in Local Bridge mode' }),
   aiStart: (...a) => active === realRobotApi ? realRobotApi.aiStart(...a) : Promise.reject(new Error('Switch to LOCAL BRIDGE mode to run the AI brain')),
   aiStop: (...a) => active === realRobotApi ? realRobotApi.aiStop(...a) : Promise.resolve({ ok:true, running:false }),
