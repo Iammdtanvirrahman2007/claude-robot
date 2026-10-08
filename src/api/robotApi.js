@@ -5,6 +5,7 @@ import { CATALOG } from '../robots/catalog.js'
 import { toRobot } from '../models/robot.js'
 import { realRobotApi } from './realRobotApi.js'
 import { createSimulationWorld } from '../sim/worldModel.js'
+import { createAutonomyController } from '../sim/autonomy.js'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const rnd = (a, b) => a + Math.random() * (b - a)
@@ -98,7 +99,7 @@ async function connect({ type, id, ip, port }) {
   await sleep(450)
   const cfg = toRobot(raw, { id: id.trim(), ip, port: Number(port) || 5000 })
   if (live[cfg.id]?.timer) clearInterval(live[cfg.id].timer)
-  live[cfg.id] = { cfg, state: initState(cfg), subs: new Set(), timer: null, token: null, world: createSimulationWorld() }
+  live[cfg.id] = { cfg, state: initState(cfg), subs: new Set(), timer: null, token: null, world: createSimulationWorld(), autonomy: createAutonomyController() }
   live[cfg.id].timer = setInterval(() => tick(cfg.id), 600)
   return cfg
 }
