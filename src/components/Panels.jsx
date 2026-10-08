@@ -4,7 +4,7 @@ import { robotApi } from '../api/robotApi.js'
 const Card = ({ title, tag, cls = '', children }) => (
   <section className={'card ' + cls}><h3>{title}{tag != null && <small>{tag}</small>}</h3>{children}</section>
 )
-const pct = (v, a, b) => Math.max(0, Math.min(100, ((v - a) / (b - a)) * 100))
+const pct = (v, a, b) => { const x = Number(v); return Number.isFinite(x) && b !== a ? Math.max(0, Math.min(100, ((x - a) / (b - a)) * 100)) : 0 }
 
 export function StatusCard({ cfg, state }) {
   return (
@@ -24,11 +24,11 @@ export function SensorPanel({ cfg, state }) {
   return (
     <Card title={cfg.panels.sensors} tag="● LIVE · 1.7 Hz">
       {cfg.sensors.map(s => {
-        const v = state.sensors[s.id]
+        const v = state.sensors?.[s.id] ?? s.v ?? 0
         let val
-        if (s.type === 'imu') val = <span className="vec">{['x', 'y', 'z'].map(k => <em key={k}>{k.toUpperCase()}<b key={v[k].toFixed(2)}>{v[k].toFixed(2)}</b></em>)}</span>
-        else if (s.type === 'gps') { const t = `${v.lat.toFixed(5)}, ${v.lon.toFixed(5)}`; val = <b key={t}>{t}</b> }
-        else { const t = v.toFixed(s.type === 'temperature' || s.type === 'torque' ? 1 : 0); val = <b key={t}>{t} <small>{s.unit}</small></b> }
+        if (s.type === 'imu') { const iv = v && typeof v === 'object' ? v : { x: 0, y: 0, z: 0 }; val = <span className="vec">{['x', 'y', 'z'].map(k => { const n = Number(iv[k] ?? 0); return <em key={k}>{k.toUpperCase()}<b>{Number.isFinite(n) ? n.toFixed(2) : '0.00'}</b></em> })}</span>
+        else if (s.type === 'gps') { const lat = Number(v?.lat ?? 0), lon = Number(v?.lon ?? 0); const t = `${lat.toFixed(5)}, ${lon.toFixed(5)}`; val = <b key={t}>{t}</b> }
+        else if (s.type === 'digital') { val = <b>{Boolean(v) ? 'ON' : 'OFF'} <small>{s.unit}</small></b> } else { const n = Number(v); const t = (Number.isFinite(n) ? n : 0).toFixed(s.type === 'temperature' || s.type === 'torque' ? 1 : 0); val = <b key={t}>{t} <small>{s.unit}</small></b> }
         return (
           <div className="row" key={s.id}>
             <span>{s.name}</span>{val}
@@ -112,7 +112,7 @@ export function CameraPanel({ cfg, state }) {
 
 
 export function MapPanel({ cfg, state }) {
-  const world = state.camera?.world
+  const world = state.world || state.camera?.world || { width: 600, height: 400, robot: { x: 0, y: 0, heading: 0 }, path: [], obstacles: [], objects: [] }
   const path = world?.path || []
   const obstacles = world?.obstacles || []
   const objects = world?.objects || []
@@ -169,7 +169,7 @@ export function ActuatorPanel({ cfg, state }) {
   return (
     <Card title={cfg.panels.actuators} tag={`${cfg.actuators.length} channels`}>
       {cfg.actuators.map(a => {
-        const v = state.actuators[a.id]
+        const v = Number(state.actuators?.[a.id] ?? a.v ?? 0)
         const w = a.type === 'motor' ? 50 + v / 2 : (v / (a.type === 'gripper' ? 100 : 180)) * 100
         return (
           <div className="act" key={a.id}>
@@ -219,7 +219,7 @@ export function ApiPanel({ cfg }) {
 }
 
 export function CommsPanel({ cfg, state }) {
-  const l = state.link
+  const l = state.link || { latency: 0, rssi: -30, tx: 0, rx: 0 }
   return (
     <Card title="COMMUNICATION" tag={<span className="ok">● LINK UP</span>}>
       <div className="flow2">
