@@ -40,20 +40,20 @@ export default function ConnectScreen({ onConnect, onOpen }) {
   async function openVirtualEnvironment() {
     const virtual = {
       id: 'VESP32-01',
-      ip: '127.0.0.1',
-      port: 5000,
+      ip: 'cloud',
+      port: 443,
       type: 'wheeled',
-      mode: 'bridge',
+      mode: 'cloud',
     }
     try {
       setBusy(true); setErr(''); setRes(null)
-      robotApi.setMode('bridge', bridge)
-      setMode('bridge')
+      robotApi.setMode('cloud')
+      setMode('cloud')
       const result = await onConnect(virtual)
       setRes(result)
       if (result) setTimeout(() => onOpen(result.id), 250)
     } catch (e) {
-      setErr(e.message || 'Virtual ESP32 test failed. Start ./virtual-esp32 first.')
+      setErr(e.message || 'Virtual ESP32 cloud test failed. Check Firebase Firestore and Anonymous Authentication.')
     } finally {
       setBusy(false)
     }
@@ -85,10 +85,11 @@ export default function ConnectScreen({ onConnect, onOpen }) {
     <div className="connect">
       <form className="card" onSubmit={e => { e.preventDefault(); go([f]) }}>
         <h2>CONNECT ROBOT</h2>
-        <small>{mode === 'bridge' ? 'Real mode · laptop bridge → ESP32' : 'Safe mode · built-in hardware simulation'}</small>
+        <small>{mode === 'cloud' ? 'Cloud mode · GitHub Pages ↔ Firestore ↔ Virtual ESP32' : mode === 'bridge' ? 'Real mode · laptop bridge → ESP32' : 'Safe mode · built-in hardware simulation'}</small>
 
         <label>Backend mode
           <select value={mode} onChange={changeMode}>
+            <option value="cloud">☁ Firestore Cloud</option>
             <option value="simulation">Simulation</option>
             <option value="bridge">Local Robot Bridge</option>
           </select>
@@ -153,9 +154,9 @@ export default function ConnectScreen({ onConnect, onOpen }) {
         <button type="button" className="btn pri" disabled={busy} onClick={openVirtualEnvironment}>
           {busy ? 'OPENING…' : '🤖 VIRTUAL ENVIRONMENT ROBOT TEST'}
         </button>
-        <small className="dim">Runs the VESP32-01 rover from the virtual-esp-32 repository through the local bridge at 127.0.0.1:5000.</small>
+        <small className="dim">Runs VESP32-01 entirely in the browser through Firebase Firestore. No local server is required.</small>
         <button className="btn" disabled={busy}>{busy ? 'CONNECTING…' : 'CONNECT'}</button>
-        <button type="button" className="btn" disabled={busy || mode === 'bridge'}
+        <button type="button" className="btn" disabled={busy || mode !== 'simulation'}
           onClick={() => go(profiles.map(p => p.defaults))}>Connect all 4 demo robots</button>
       </form>
 
