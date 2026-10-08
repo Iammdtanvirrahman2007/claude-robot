@@ -61,7 +61,8 @@ export function createWorldModel() {
     } else {
       model.lastTurnCommand = null
     }
-    else if (cmd.includes('FORWARD') || cmd.includes('WALK_FORWARD') || cmd.includes('FLY_FORWARD')) {
+
+    if (cmd.includes('FORWARD') || cmd.includes('WALK_FORWARD') || cmd.includes('FLY_FORWARD')) {
       const r = model.heading * Math.PI / 180
       model.x += Math.sin(r) * step
       model.y += Math.cos(r) * step
