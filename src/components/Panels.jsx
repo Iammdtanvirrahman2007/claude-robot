@@ -41,14 +41,14 @@ export function SensorPanel({ cfg, state }) {
 }
 
 export function CameraPanel({ cfg, state }) {
-  const c = state.camera
+  const c = state.camera || {}
   const [streaming, setStreaming] = useState(false)
   const [autoVision, setAutoVision] = useState(false)
   const [busy, setBusy] = useState(false)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const canvasRef = useRef(null)
-  const [vision, setVision] = useState(c?.vision || null)
+  const [vision, setVision] = useState(c.vision || null)
 
   useEffect(() => () => streamRef.current?.getTracks().forEach(t => t.stop()), [])
 
