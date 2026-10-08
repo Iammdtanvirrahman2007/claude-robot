@@ -9,7 +9,7 @@ const DIRS = [
 ]
 
 const key = (x, y) => x + ',' + y
-const cellOf = (x, y) => ({ x: Math.round(x / CELL), y: Math.round(y / CELL) })
+const cellOf = (x, y, size = CELL) => ({ x: Math.round(x / size), y: Math.round(y / size) })
 
 export function createNavigationMap(options = {}) {
   const cellSize = options.cellSizeCm ?? CELL
@@ -19,7 +19,7 @@ export function createNavigationMap(options = {}) {
   const planner = createPathPlanner({ maxNodes: 5000 })
 
   const mark = (x, y, type = 'free', confidence = 0.5) => {
-    const c = cellOf(x, y), k = key(c.x, c.y)
+    const c = cellOf(x, y, cellSize), k = key(c.x, c.y)
     const old = cells.get(k) || { x: c.x, y: c.y, state: 'unknown', confidence: 0, visits: 0 }
     old.state = type
     old.confidence = Math.max(old.confidence, Math.min(1, Number(confidence) || 0))
@@ -32,7 +32,7 @@ export function createNavigationMap(options = {}) {
   const observe = (world = {}) => {
     const robot = world.robot || { x: 0, y: 0 }
     mark(robot.x, robot.y, 'free', 1)
-    const rc = cellOf(robot.x, robot.y)
+    const rc = cellOf(robot.x, robot.y, cellSize)
     const rk = key(rc.x, rc.y)
     visits.set(rk, (visits.get(rk) || 0) + 1)
 
@@ -48,19 +48,32 @@ export function createNavigationMap(options = {}) {
   const neighbors = c => DIRS.map(d => ({ ...d, x: c.x + d.dx, y: c.y + d.dy }))
 
   const chooseTarget = (world = {}) => {
-    const r = cellOf(world.robot?.x || 0, world.robot?.y || 0)
-    const candidates = neighbors(r)
+    const r = cellOf(world.robot?.x || 0, world.robot?.y || 0, cellSize)
+    const frontier = []
+    for (const c of cells.values()) {
+      if (c.state !== 'free') continue
+      for (const n of neighbors(c)) {
+        const nk = key(n.x, n.y)
+        if (blocked.has(nk) || cells.has(nk)) continue
+        frontier.push({ ...n, visits: visits.get(nk) || 0, distance: Math.abs(n.x-r.x)+Math.abs(n.y-r.y), frontier:true })
+      }
+    }
+    const unique = new Map(frontier.map(c => [key(c.x,c.y), c]))
+    const candidates = [...unique.values()].sort((a,b) =>
+      (a.visits-b.visits) || (a.distance-b.distance)
+    )
+    if (candidates.length) return candidates[0]
+    return neighbors(r)
       .filter(c => !blocked.has(key(c.x, c.y)))
-      .map(c => ({ ...c, visits: visits.get(key(c.x, c.y)) || 0, known: cells.get(key(c.x, c.y))?.state === 'free' }))
-      .sort((a, b) => (a.visits - b.visits) || (Number(a.known) - Number(b.known)))
-    return candidates[0] || null
+      .map(c => ({ ...c, visits: visits.get(key(c.x,c.y)) || 0, distance: 1, frontier:false }))
+      .sort((a,b)=>(a.visits-b.visits))[0] || null
   }
 
   const plan = (world = {}) => {
     const target = chooseTarget(world)
     if (!target) return { command: 'STOP', arg: 0, reason: 'navigation: no safe neighboring cell', path: [] }
-    const route = planner.plan(snapshot(), cellOf(world.robot?.x || 0, world.robot?.y || 0), { x: target.x, y: target.y })
-    const r = cellOf(world.robot?.x || 0, world.robot?.y || 0)
+    const route = planner.plan(snapshot(), cellOf(world.robot?.x || 0, world.robot?.y || 0, cellSize), { x: target.x, y: target.y })
+    const r = cellOf(world.robot?.x || 0, world.robot?.y || 0, cellSize)
     if (target.x === r.x && target.y === r.y + 1) return { command: 'FORWARD', arg: 40, reason: 'navigation: route to unexplored north cell', path: route }
     if (target.x === r.x && target.y === r.y - 1) return { command: 'BACKWARD', arg: 30, reason: 'navigation: route to unexplored south cell', path: route }
     if (target.x > r.x) return { command: 'TURN_RIGHT', arg: 90, reason: 'navigation: route to explore east', path: route }
