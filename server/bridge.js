@@ -7,6 +7,7 @@ import { buildBrain, startBrain } from './brainRunner.js'
 import { startAIBrain, stopAIBrain, aiBrainRunning, decide, personalityProfiles, commandForFunction } from './aiBrain.js'
 import { analyzeFrame } from './vision.js'
 import { createWorldModel } from './worldModel.js'
+import { createNavigationMap } from './navigationMap.js'
 import { CATALOG } from '../src/robots/catalog.js'
 import { toRobot } from '../src/models/robot.js'
 
@@ -126,7 +127,8 @@ const updateWorldFromState = (r, state) => {
   const n = Number(raw)
   const distanceCm = Number.isFinite(n) ? (sensors.obstacle != null && sensors.front_distance == null ? n * 100 : n) : null
   if (state?.camera?.vision) r.world.observe(state.camera.vision, distanceCm)
-  state.camera = state.camera ? { ...state.camera, world: r.world.snapshot() } : { world: r.world.snapshot() }
+  r.navigation?.observe(r.world.snapshot())
+  state.camera = state.camera ? { ...state.camera, world: { ...r.world.snapshot(), navigation: r.navigation?.snapshot() } } : { world: { ...r.world.snapshot(), navigation: r.navigation?.snapshot() } }
 }
 
 const validateCommand = (r, rawCmd, rawArg) => {
@@ -498,7 +500,7 @@ const server = http.createServer(async (req, res) => {
     stopAIBrain(params.id)
     old.socket?.destroy()
   }
-      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, buildDir: null, buildBinary: null, world: createWorldModel() }
+      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, buildDir: null, buildBinary: null, world: createWorldModel(), navigation: createNavigationMap() }
       robots.set(params.id, r)
       attachSocket(r)
       return json(res, 200, { robot: r.robot, transport: 'tcp', status: 'connecting' })
