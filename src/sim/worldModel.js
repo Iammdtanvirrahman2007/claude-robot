@@ -1,6 +1,7 @@
 const TTL = 9000
 const MAX = 160
 const STEP_CM = 12
+const CELL_CM = 20
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 const normalize = d => {
@@ -19,6 +20,8 @@ export function createSimulationWorld() {
     lastCommand: 'IDLE',
     lastTurnCommand: null,
     lastUpdate: Date.now(),
+    cells: new Map(),
+    visits: new Map(),
   }
 
   const move = (command, arg, dt) => {
@@ -52,12 +55,21 @@ export function createSimulationWorld() {
   }
 
   const observe = (distanceCm, blocked = false, now = Date.now()) => {
+    const rc = { x: Math.round(model.x / CELL_CM), y: Math.round(model.y / CELL_CM) }
+    const rk = rc.x + ',' + rc.y
+    const current = model.cells.get(rk) || { x: rc.x, y: rc.y, state: 'free', confidence: 1 }
+    current.lastSeen = now
+    current.visits = (model.visits.get(rk) || 0) + 1
+    model.cells.set(rk, current)
+    model.visits.set(rk, current.visits)
     if (Number.isFinite(Number(distanceCm)) && Number(distanceCm) < 120) {
       const d = Number(distanceCm)
       const r = model.heading * Math.PI / 180
       const x = model.x + Math.sin(r) * d
       const y = model.y + Math.cos(r) * d
       model.obstacles.set('sim-front', { id: 'sim-front', label: 'simulated obstacle', x, y, distanceCm: d, position: 'center', lastSeen: now })
+      const oc = { x: Math.round(x / CELL_CM), y: Math.round(y / CELL_CM) }; const ok = oc.x + ',' + oc.y
+      model.cells.set(ok, { x: oc.x, y: oc.y, state: 'blocked', confidence: 0.9, lastSeen: now, visits: model.visits.get(ok) || 0 })
     }
     if (blocked) {
       const d = Number.isFinite(Number(distanceCm)) ? Number(distanceCm) : 20
@@ -85,6 +97,7 @@ export function createSimulationWorld() {
       path: model.path.map(p => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })),
       obstacles: [...model.obstacles.values()].map(o => ({ ...o, ageMs: now - o.lastSeen })),
       objects: [...model.objects.values()].map(o => ({ ...o, ageMs: now - o.lastSeen })),
+      grid: { cellSizeCm: CELL_CM, cells: [...model.cells.values()].map(c => ({ ...c, visits: model.visits.get(c.x + ',' + c.y) || 0 })) },
       lastCommand: model.lastCommand,
       updatedAt: new Date(now).toISOString(),
     }
