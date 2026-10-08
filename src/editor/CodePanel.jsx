@@ -53,7 +53,8 @@ export default function CodePanel({ bot, patch }) {
   const edit = v => patch(r => ({ ...r, files: (Array.isArray(r.files) ? r.files : safeFiles).map((f, i) => (i === tab ? { ...f, code: String(v ?? '') } : f)) }))
   const build = async () => {
     try {
-      const res = await robotApi.build(cfg.id, String(safeFiles[0]?.code ?? ''))
+      const source = String(safeFiles[0]?.code ?? '')
+      const res = await robotApi.build(cfg.id, source)
       setErrs(res.errors || [])
       return res.ok
     } catch (e) {
@@ -65,7 +66,7 @@ export default function CodePanel({ bot, patch }) {
     if (busy) return
     if (!(await build())) return
     try {
-      await robotApi.run(cfg.id)
+      await robotApi.run(cfg.id, String(safeFiles[0]?.code ?? ''))
     } catch (e) {
       setErrs([{ line: 1, msg: e.message || String(e) }])
     }
@@ -90,7 +91,7 @@ export default function CodePanel({ bot, patch }) {
     <section className="code">
       <div className="tabs">
         {safeFiles.map((f, i) => <button key={f.name} className={'tab' + (i === tab ? ' on' : '')} onClick={() => setTab(i)}>{f.name}</button>)}
-        <small style={{ marginLeft: 'auto', paddingBottom: 6 }}>Executes on the LAPTOP — not on the ESP32</small>
+        <small style={{ marginLeft: 'auto', paddingBottom: 6 }}>Runs the ESP32 sketch in the Virtual ESP32</small>
       </div>
       <div className="tools">
         <button className="btn" onClick={build} disabled={busy} title="Ctrl+B">Build</button>
