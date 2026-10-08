@@ -123,7 +123,8 @@ function fuseVisionWithSensors(vision, state) {
 
 const updateWorldFromState = (r, state) => {
   if (!r.world) return
-  r.world.updateMovement(state?.currentCommand || 'IDLE', state?.speed ?? 0, Date.now())
+  if (state?.pose && typeof state.pose === 'object') r.world.setPose(state.pose)
+  else r.world.updateMovement(state?.currentCommand || 'IDLE', state?.speed ?? 0, Date.now())
   const sensors = state?.sensors || {}
   const raw = sensors.front_distance ?? sensors.obstacle
   const n = Number(raw)
