@@ -1,4 +1,4 @@
-import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db, ensureFirebaseAuth } from '../firebase.js'
 
 const live = {}
@@ -88,7 +88,9 @@ function subscribe(id, fn) {
 
 async function sendCommand(id, cmd, arg = 0) {
   const r = live[id] ||= { subs: new Set(), seq: 0 }
-  r.seq = (r.seq || 0) + 1
+  const current = await getDoc(commandDoc(id))
+  const remoteSeq = Number(current.exists() ? current.data()?.seq || 0 : 0)
+  r.seq = Math.max(r.seq || 0, remoteSeq) + 1
   const value = Number(arg) || 0
   const command = String(cmd || 'STOP').toUpperCase()
   const commandId = `cmd-${Date.now()}-${r.seq}`
