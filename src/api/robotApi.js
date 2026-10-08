@@ -4,6 +4,7 @@
 import { CATALOG } from '../robots/catalog.js'
 import { toRobot } from '../models/robot.js'
 import { realRobotApi } from './realRobotApi.js'
+import { createSimulationWorld } from '../sim/worldModel.js'
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const rnd = (a, b) => a + Math.random() * (b - a)
@@ -72,6 +73,8 @@ function tick(id) {
     tx: s.link.tx,
     rx: s.link.rx + 1,
   }
+  r.world.update(s.currentCommand, s.speed, s.sensors.front_distance, t)
+  s.camera = s.camera ? { ...s.camera, world: r.world.snapshot() } : { world: r.world.snapshot() }
   emit(id, { kind: 'telemetry', state: structuredClone(s) })
 }
 
@@ -81,6 +84,8 @@ function command(id, cmd, arg) {
   r.state.currentCommand = cmd
   r.state.speed = IDLE.test(cmd) ? 0 : (arg ?? 50)
   r.state.link.tx++
+  r.world.update(r.state.currentCommand, r.state.speed, r.state.sensors.front_distance, Date.now())
+  r.state.camera = r.state.camera ? { ...r.state.camera, world: r.world.snapshot() } : { world: r.world.snapshot() }
   emit(id, { kind: 'telemetry', state: structuredClone(r.state) })
 }
 
@@ -93,7 +98,7 @@ async function connect({ type, id, ip, port }) {
   await sleep(450)
   const cfg = toRobot(raw, { id: id.trim(), ip, port: Number(port) || 5000 })
   if (live[cfg.id]?.timer) clearInterval(live[cfg.id].timer)
-  live[cfg.id] = { cfg, state: initState(cfg), subs: new Set(), timer: null, token: null }
+  live[cfg.id] = { cfg, state: initState(cfg), subs: new Set(), timer: null, token: null, world: createSimulationWorld() }
   live[cfg.id].timer = setInterval(() => tick(cfg.id), 600)
   return cfg
 }
