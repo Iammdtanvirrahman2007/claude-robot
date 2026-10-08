@@ -8,6 +8,8 @@ import { startAIBrain, stopAIBrain, aiBrainRunning, decide, personalityProfiles,
 import { analyzeFrame } from './vision.js'
 import { createWorldModel } from './worldModel.js'
 import { createNavigationMap } from './navigationMap.js'
+import { createRouteExecutor } from './routeExecutor.js'
+import { createPathPlanner } from './pathPlanner.js'
 import { CATALOG } from '../src/robots/catalog.js'
 import { toRobot } from '../src/models/robot.js'
 
@@ -500,7 +502,7 @@ const server = http.createServer(async (req, res) => {
     stopAIBrain(params.id)
     old.socket?.destroy()
   }
-      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, buildDir: null, buildBinary: null, world: createWorldModel(), navigation: createNavigationMap() }
+      const r = { params, robot: baseRobot(params), socket: null, clients: new Set(), connected: false, tx: 0, rx: 0, lastSeen: Date.now(), lastState: null, code: '', brain: null, aiBrain: false, buildDir: null, buildBinary: null, world: createWorldModel(), navigation: createNavigationMap(), planner: createPathPlanner(), route: createRouteExecutor() }
       robots.set(params.id, r)
       attachSocket(r)
       return json(res, 200, { robot: r.robot, transport: 'tcp', status: 'connecting' })
@@ -516,6 +518,34 @@ const server = http.createServer(async (req, res) => {
         robots.delete(data.id)
       }
       return json(res, 200, { ok: true })
+    }
+
+    if (url.pathname === '/api/robot/navigate') {
+      const r = robots.get(data.id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      const world = r.world?.snapshot() || { robot: { x: 0, y: 0 } }
+      const map = r.navigation?.snapshot() || { cells: [], blocked: [] }
+      const goal = { x: Number(data.x), y: Number(data.y) }
+      if (!Number.isFinite(goal.x) || !Number.isFinite(goal.y)) return json(res, 400, { error: 'Goal x and y are required' })
+      const path = r.planner.plan(map, {
+        x: Math.round((world.robot?.x || 0) / (map.cellSizeCm || 20)),
+        y: Math.round((world.robot?.y || 0) / (map.cellSizeCm || 20)),
+      }, goal)
+      if (!path.length) return json(res, 409, { error: 'No safe route to goal', path: [] })
+      r.route.setRoute(path, world.robot?.heading || 0)
+      return json(res, 200, { ok: true, path, route: r.route.status() })
+    }
+
+    if (url.pathname === '/api/robot/navigate/next') {
+      const r = robots.get(data.id)
+      if (!r) return json(res, 404, { error: 'Robot is not connected' })
+      const decision = r.route.next(r.world?.snapshot()?.robot || {})
+      if (decision.command !== 'STOP') {
+        const command = validateCommand(r, decision.command, decision.arg)
+        sendTcp(r, { type: 'command', cmd: command.cmd, arg: command.arg })
+      }
+      broadcast(r.params.id, { kind: 'navigation', decision, route: r.route.status() })
+      return json(res, 200, { ok: true, decision, route: r.route.status() })
     }
 
     if (url.pathname === '/api/robot/command') {
