@@ -607,8 +607,24 @@ const server = http.createServer(async (req, res) => {
           sendTcp(r, { type: 'command', cmd, arg: arg ?? 0 })
         },
         resolveIntent: intent => {
-          if (intent === highLevelIntents.explore) return r.navigation?.plan(r.world?.snapshot() || {}) || { command: 'STOP', arg: 0, reason: 'no navigation plan' }
           if (intent === highLevelIntents.hold) return { command: 'STOP', arg: 0, reason: 'AI requested hold position' }
+          if (intent === highLevelIntents.explore) {
+            const world = r.world?.snapshot() || { robot: { x: 0, y: 0 } }
+            if (!r.route?.status()?.active) {
+              const target = r.navigation?.chooseTarget(world)
+              const map = r.navigation?.snapshot() || { cellSizeCm: 20, cells: [], blocked: [] }
+              if (!target) return { command: 'STOP', arg: 0, reason: 'no exploration frontier' }
+              const size = map.cellSizeCm || 20
+              const start = {
+                x: Math.round((world.robot?.x || 0) / size),
+                y: Math.round((world.robot?.y || 0) / size),
+              }
+              const path = r.planner?.plan(map, start, { x: target.x, y: target.y }) || []
+              if (!path.length) return { command: 'STOP', arg: 0, reason: 'no safe exploration route' }
+              r.route.setRoute(path, world.robot?.heading || 0)
+            }
+            return r.route.next(world.robot || {})
+          }
           return null
         },
         onDecision: decision => broadcast(r.params.id, { kind: 'ai', decision }),
