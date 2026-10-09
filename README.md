@@ -55,7 +55,7 @@ The Virtual ESP32 publishes its hardware description at startup and includes it 
 
 ### Security boundary
 
-The Firestore rules validate command shape, allowed command names, value range, protocol, TTL, and increasing sequence numbers. Because this public browser app currently uses Firebase Anonymous Authentication, those rules do **not** establish a trusted operator identity. Use this path for the virtual simulator only. Before connecting physical hardware, move command writes behind a trusted authenticated backend (or equivalent server-side authorization), restrict telemetry writes to the device/backend, and keep a physical emergency stop independent of software.
+The Firestore rules validate command shape, allowed command names, value range, protocol, TTL, and increasing sequence numbers. The Firestore rules file is checked into this repository, but the GitHub Pages workflow does not deploy Firebase rules. Deploy and verify `firestore.rules` in the Firebase project before relying on those checks. Because this public browser app currently uses Firebase Anonymous Authentication, those rules do **not** establish a trusted operator identity. Use this path for the virtual simulator only. Before connecting physical hardware, move command writes behind a trusted authenticated backend (or equivalent server-side authorization), restrict telemetry writes to the device/backend, and keep a physical emergency stop independent of software.
 
 ## Safety
 
