@@ -2,7 +2,36 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validControl() {
+      return request.resource.data.keys().hasAll([
+          'seq', 'id', 'command', 'value', 'priority', 'ttl',
+          'issuedAtMs', 'source', 'protocol'
+        ])
+        && request.resource.data.seq is int
+        && request.resource.data.seq > 0
+        && request.resource.data.id is string
+        && request.resource.data.id.size() > 0
+        && request.resource.data.id.size() <= 120
+        && request.resource.data.command in [
+          'FORWARD', 'BACKWARD', 'TURN_LEFT', 'TURN_RIGHT',
+          'STOP', 'SET_SPEED'
+        ]
+        && request.resource.data.value is number
+        && request.resource.data.value >= -100
+        && request.resource.data.value <= 100
+        && request.resource.data.priority is int
+        && request.resource.data.ttl is int
+        && request.resource.data.ttl >= 250
+        && request.resource.data.ttl <= 5000
+        && request.resource.data.issuedAtMs is int
+        && request.resource.data.source is string
+        && request.resource.data.source.size() <= 80
+        && request.resource.data.protocol == '1.1';
+    }
 
     match /robots/{robotId} {
       allow read, write: if signedIn();
@@ -12,7 +41,12 @@ service cloud.firestore {
       }
 
       match /control/{docId} {
-        allow read, write: if signedIn();
+        allow read: if signedIn();
+        allow create: if signedIn() && validControl();
+        allow update: if signedIn()
+          && validControl()
+          && request.resource.data.seq > resource.data.seq;
+        allow delete: if false;
       }
     }
   }
