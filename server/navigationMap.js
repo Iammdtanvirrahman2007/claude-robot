@@ -58,9 +58,9 @@ export function createNavigationMap(options = {}) {
       if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
         // Rectangle obstacles must occupy every intersecting grid cell, not just their top-left corner.
         const minX = Math.floor(o.x / cellSize)
-        const maxX = Math.floor((o.x + width - Number.EPSILON) / cellSize)
+        const maxX = Math.ceil((o.x + width) / cellSize) - 1
         const minY = Math.floor(o.y / cellSize)
-        const maxY = Math.floor((o.y + height - Number.EPSILON) / cellSize)
+        const maxY = Math.ceil((o.y + height) / cellSize) - 1
         for (let x = minX; x <= maxX; x++) {
           for (let y = minY; y <= maxY; y++) markBlockedCell(x, y, confidence)
         }
