@@ -62,7 +62,10 @@ async function connect() {
     version: 'cloud-1.2',
     sensors: cfg.sensors.map(({ id, type, unit, min, max }) => ({ id, type, unit, min: min ?? null, max: max ?? null })),
     actuators: cfg.actuators.map(({ id, type, unit }) => ({ id, type, unit })),
-    controls: cfg.controls.map(({ cmd, fn, label }) => ({ cmd, fn, label })),
+    controls: [
+      ...cfg.controls.map(({ cmd, fn, label }) => ({ cmd, fn, label })),
+      { cmd: 'SET_SPEED', fn: 'setSpeed', label: 'Speed limit' }
+    ],
     map: { width: 600, height: 400, cell: 20 }
   }
   await setDoc(doc(db, 'robots', ROBOT_ID), {
