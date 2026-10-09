@@ -55,9 +55,20 @@ function nowLine() {
 
 async function connect() {
   await ensureFirebaseAuth()
+  const hardware = {
+    protocol: '1.1',
+    type: 'wheeled',
+    firmware: 'virtual-esp32',
+    version: 'cloud-1.2',
+    sensors: cfg.sensors.map(({ id, type, unit, min, max }) => ({ id, type, unit, min: min ?? null, max: max ?? null })),
+    actuators: cfg.actuators.map(({ id, type, unit }) => ({ id, type, unit })),
+    controls: cfg.controls.map(({ cmd, fn, label }) => ({ cmd, fn, label })),
+    map: { width: 600, height: 400, cell: 20 }
+  }
   await setDoc(doc(db, 'robots', ROBOT_ID), {
     id: ROBOT_ID, name: 'Virtual ESP32 Rover', type: 'wheeled',
-    firmware: 'virtual-esp32', protocol: '1.1', online: true, updatedAt: serverTimestamp()
+    firmware: 'virtual-esp32', protocol: '1.1', hardware, online: true,
+    updatedAt: serverTimestamp()
   }, { merge: true })
 
   const existing = await new Promise(resolve => {
@@ -66,7 +77,16 @@ async function connect() {
       if (!done) { done = true; unsub(); resolve(snap.exists() ? snap.data() : null) }
     }, () => { if (!done) { done = true; unsub(); resolve(null) } })
   })
-  return { ...cfg, initialState: existing ? { ...baseState, ...existing } : baseState }
+  return {
+    ...cfg,
+    hardware,
+    initialState: existing ? {
+      ...baseState, ...existing,
+      sensors: { ...baseState.sensors, ...(existing.sensors || {}) },
+      actuators: { ...baseState.actuators, ...(existing.actuators || {}) },
+      hardware: existing.hardware || hardware
+    } : { ...baseState, hardware }
+  }
 }
 
 function subscribe(id, fn) {
@@ -91,14 +111,20 @@ async function sendCommand(id, cmd, arg = 0) {
   const current = await getDoc(commandDoc(id))
   const remoteSeq = Number(current.exists() ? current.data()?.seq || 0 : 0)
   r.seq = Math.max(r.seq || 0, remoteSeq) + 1
-  const value = Number(arg) || 0
-  const command = String(cmd || 'STOP').toUpperCase()
+  const command = String(cmd || 'STOP').trim().toUpperCase()
+  const allowed = new Set(cfg.controls.map(item => item.cmd))
+  if (!allowed.has(command) && command !== 'SET_SPEED') {
+    throw new Error(`Unsupported robot command: ${command}`)
+  }
+  const parsed = Number(arg)
+  const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 0
   const commandId = `cmd-${Date.now()}-${r.seq}`
   await setDoc(commandDoc(id), {
     seq: r.seq, id: commandId, command, value,
     priority: command === 'STOP' ? 1000 : 100,
     ttl: command === 'STOP' ? 5000 : 1500,
-    issuedAt: serverTimestamp(), issuedAtMs: Date.now(), source: 'claude-robot'
+    issuedAt: serverTimestamp(), issuedAtMs: Date.now(),
+    source: 'claude-robot', protocol: '1.1'
   })
   r.subs.forEach(fn => fn({ kind: 'log', line: { t: nowLine(), level: 'info', text: `ESP32 command [${commandId}]: ${command}${value ? ' ' + value : ''}` } }))
 }
