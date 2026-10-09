@@ -29,6 +29,21 @@ export function createNavigationMap(options = {}) {
     return old
   }
 
+  const markBlockedCell = (x, y, confidence) => {
+    const k = key(x, y)
+    const old = cells.get(k) || { x, y, state: 'unknown', confidence: 0, visits: 0 }
+    old.state = 'blocked'
+    old.confidence = Math.max(old.confidence, Math.min(1, Number(confidence) || 0))
+    old.lastSeen = Date.now()
+    cells.set(k, old)
+    blocked.add(k)
+    if (cells.size > MAX_CELLS) {
+      const oldest = cells.keys().next().value
+      cells.delete(oldest)
+      blocked.delete(oldest)
+    }
+  }
+
   const observe = (world = {}) => {
     const robot = world.robot || { x: 0, y: 0 }
     mark(robot.x, robot.y, 'free', 1)
@@ -37,8 +52,20 @@ export function createNavigationMap(options = {}) {
     visits.set(rk, (visits.get(rk) || 0) + 1)
 
     for (const o of world.obstacles || []) {
-      if (Number.isFinite(Number(o.x)) && Number.isFinite(Number(o.y))) {
-        const c = mark(o.x, o.y, 'blocked', Number(o.confidence ?? 0.8))
+      if (!Number.isFinite(Number(o.x)) || !Number.isFinite(Number(o.y))) continue
+      const confidence = Number(o.confidence ?? 0.8)
+      const width = Number(o.w), height = Number(o.h)
+      if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+        // Rectangle obstacles must occupy every intersecting grid cell, not just their top-left corner.
+        const minX = Math.floor(o.x / cellSize)
+        const maxX = Math.ceil((o.x + width) / cellSize) - 1
+        const minY = Math.floor(o.y / cellSize)
+        const maxY = Math.ceil((o.y + height) / cellSize) - 1
+        for (let x = minX; x <= maxX; x++) {
+          for (let y = minY; y <= maxY; y++) markBlockedCell(x, y, confidence)
+        }
+      } else {
+        const c = mark(o.x, o.y, 'blocked', confidence)
         blocked.add(key(c.x, c.y))
       }
     }

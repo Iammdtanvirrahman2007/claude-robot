@@ -209,6 +209,11 @@ function attachSocket(r) {
         r.lastSeen = Date.now()
         r.rx++
         if (msg.type === 'hardware' && msg.robot) normalizeRobot(r, { ...msg.robot, type: msg.robot.type || r.params.type })
+        // The native Virtual ESP32 currently reports the hardware object directly, while
+        // other firmware may wrap it as { type: "hardware", robot: { ... } }.
+        else if (msg.ok === true && Array.isArray(msg.sensors) && Array.isArray(msg.actuators)) {
+          normalizeRobot(r, { ...msg, type: msg.type || r.params.type })
+        }
         else if (msg.type === 'telemetry' && msg.state) {
           r.lastState = { ...msg.state, connected: true, heartbeat: r.lastSeen,
             link: { ...(msg.state.link || {}), tx: r.tx, rx: r.rx } }
